@@ -10,6 +10,8 @@
 
 The seed is centered on August 2026. In the calendar, navigate to August 2026 if it is not already visible.
 
+For production-auth evidence, use the existing ignored Production Mode environment files instead of Demo Mode. The hosted project was verified on 2026-08-04 after migration from Legacy HS256 to ECC P-256 / ES256. Never show an access/refresh token, authorization header, password, UUID, real email address, database connection, anon key, or service-role key in a screenshot.
+
 ## UI screenshot checklist
 
 - [ ] Demo Role Selection showing Employee, HR, and Admin cards.
@@ -49,6 +51,24 @@ Capture the Supabase Table Editor or SQL results without connection strings:
 - [ ] `user_department_history` closed and open rows for EMP003.
 - [ ] RLS enabled on all seven tables.
 - [ ] `ex_bookings_no_active_overlap` exclusion constraint.
+
+## Production authentication and authorization evidence checklist
+
+- [ ] Supabase Signing Keys page showing the Current key as ECC P-256 / ES256. It is acceptable for the Previous Legacy HS256 key to remain visible; do not revoke it for evidence capture.
+- [ ] A redacted OIDC/JWKS result showing ES256/P-256 publication without copying a token or key material into the paper.
+- [ ] CoDesk production login screen and a successful admin landing page. Use a disposable evidence identity or redact all personal fields.
+- [ ] Redacted browser Network entry for `GET /api/me` showing HTTP 200. Hide the Authorization header and response UUID/email; retain only role/department evidence if it is non-sensitive test data.
+- [ ] Employee, HR, and admin menu boundaries using disposable users. Also capture redacted direct API 403 evidence so hidden menus are not the only authorization proof.
+- [ ] Admin User Management page and a disposable creation success through `POST /api/admin/users`; do not show the temporary password or email.
+- [ ] Redacted database/Auth comparison proving `auth.users.id = co_desk.profiles.profile_id` without publishing the UUID.
+- [ ] Initial `user_department_history` row for the disposable user, with identifying columns redacted.
+- [ ] Evidence that the frontend request targets `/api/admin/users`, not `/auth/v1/admin/users`, and that no service-role credential is present.
+- [ ] Project Functions page or CLI listing showing the unused legacy `admin_create_user` Edge Function is absent. Do not create a replacement; the current architecture requires no Edge Function for user creation.
+- [ ] Cleanup evidence: disposable profile inactive, no active disposable booking, and disposable Auth identity removed. Do not delete or modify the real administrator.
+
+Verified hosted results available for Chapter 4 narration (without publishing identifiers): ES256 signature and JWKS `kid` passed; issuer/audience/subject passed; `/api/me` returned 200; Auth/profile UUIDs matched; employee/HR/admin menu and direct API boundaries passed; exactly seven tables/five views/RLS on seven tables passed; critical functions/report views were denied to browser roles; overlap, limited/unlimited capacity, holiday acknowledgement, audit immutability, and department history passed.
+
+The Previous Legacy key may be revoked manually in the Supabase Dashboard only after every old HS256 access token has expired and all active clients have refreshed to ES256. This is not part of automated verification or screenshot capture.
 
 Suggested read-only SQL:
 
@@ -92,5 +112,7 @@ Expected local verified totals from the implementation session:
 - Playwright: 15 passed against the real temporary database/API/UI stack.
 - SQL smoke script: completed and rolled back without errors on both a fresh and populated PostgreSQL 14.21 database.
 - Concurrency evidence: one booking committed and the concurrent capacity contender returned `capacity_exceeded`.
+
+Post-hosted-verification rerun on 2026-08-04 produced the same 19 xUnit and 12 Vitest totals, with backend build 0 warnings/errors and frontend typecheck/lint/build passing. Safe isolated Playwright browser probes against Production Mode also passed for real login, role menus, user creation response, and direct API/database flows. Do not run `demo-mode.spec.ts` against Production Mode because its Demo header is intentionally disabled.
 
 These are the independent 2026-08-04 totals. For requirement status and limitations, include `docs/VERIFICATION_AND_REQUIREMENT_MATRIX.md` in the Chapter 4 evidence package.

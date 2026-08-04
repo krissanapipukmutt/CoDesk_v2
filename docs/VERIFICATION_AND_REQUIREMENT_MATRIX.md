@@ -20,6 +20,11 @@ Evidence labels used in the matrix:
 - `FE-1`: strict typecheck, lint, 12 Vitest/RTL tests and production build all passed.
 - `E2E-1`: 15/15 Playwright tests passed against Vite + live ASP.NET + PostgreSQL. No application-data mock was used.
 - `SEC-1`: secret/config scan, `dotnet list package --vulnerable --include-transitive`, and `npm audit --omit=dev`.
+- `HOST-AUTH-1`: real hosted password login; ES256 header and cryptographic signature; published JWKS `kid`; configured issuer; `authenticated` audience; matching Auth subject/profile UUID; active profile; `/api/me` 200 with database-matching role and department.
+- `HOST-ADMIN-1`: disposable users created through `POST /api/admin/users`; Auth/profile UUID and requested fields matched; initial history existed; duplicate/reference/password validation returned the expected 409/400; service credential stayed backend-only; Auth identities were deleted after profiles were deactivated.
+- `HOST-RBAC-1`: real employee, HR, and admin Auth users exercised Thai UI menus and direct API allow/deny boundaries, calendar scope, cross-user booking, management, role assignment, reports, and audit access.
+- `HOST-DB-1`: hosted catalog, grants, RLS, audit immutability, overlap, limited/unlimited capacity, holiday acknowledgement, department history, cleanup, and capacity restoration were exercised against the intended Supabase project.
+- `RUN-2`: post-hosted-verification rerun of .NET restore/build/test and frontend install/typecheck/lint/test/build; 19 backend and 12 frontend tests passed.
 
 ## 1. Approved scope and technology
 
@@ -28,8 +33,8 @@ Evidence labels used in the matrix:
 | R-001 | Web application for reserving office attendance | Short Paper Ch.1, Ch.3.1 | `frontend/src/App.tsx`, `pages/BookingsPage.tsx` | `BookingsController.cs` | `co_desk.bookings` | `demo-mode.spec.ts` booking flows | E2E-1 created, read, edited and cancelled records | Verified | Actual API/database path used. |
 | R-002 | React component-based frontend | Short Paper 2.3 | `frontend/src/**` | — | — | FE-1 | Production bundle inspected and run | Verified | React 19 + TypeScript strict. |
 | R-003 | ASP.NET backend for business rules and database access | Short Paper 2.3 | `api/client.ts` | `backend/src/CoDesk.Api`, Application, Infrastructure | booking RPCs/views | BE-1, E2E-1 | Live API served all UI data | Verified | Four-project layering retained. |
-| R-004 | Supabase PostgreSQL is the target database | Short Paper 2.1, 2.3 | — | Npgsql/EF Core configuration | PostgreSQL SQL `00`-`08` | DB-1, DB-2 | Compatible PostgreSQL 14 behavior passed locally | Partially verified | Hosted Supabase extensions, roles, grants and pooler remain blocked by missing tenant credentials. |
-| R-005 | Supabase Auth provides production authentication | Short Paper 2.3 | `auth/supabase.ts`, `AuthContext.tsx` | JWT bearer and Supabase Admin service | UUID linkage to profiles | BE-1 | Production flow statically traced | Partially verified | No hosted token/Admin API was available. |
+| R-004 | Supabase PostgreSQL is the target database | Short Paper 2.1, 2.3 | — | Npgsql/EF Core configuration | PostgreSQL SQL `00`-`08` | DB-1, DB-2, HOST-DB-1 | Hosted catalog, roles, RLS, functions, views, and backend operations passed through the configured production connection | Verified | Intended Supabase project was exercised without destructive reset. |
+| R-005 | Supabase Auth provides production authentication | Short Paper 2.3 | `auth/supabase.ts`, `AuthContext.tsx` | JWT bearer and Supabase Admin service | UUID linkage to profiles | BE-1, HOST-AUTH-1 | Real hosted password logins and `/api/me` succeeded with ES256 tokens | Verified | Legacy signer was migrated to ECC P-256 / ES256. |
 | R-006 | Application schema is `co_desk` | Short Paper 3.3, ERD | — | schema-qualified Npgsql/EF mappings | `co_desk` schema | DB-1, DB-2 | Catalog returned the schema | Verified | No application object was placed in `public`. |
 | R-007 | Exactly seven approved application tables | Short Paper 3.3, ERD | — | seven EF entities/mappings | roles, departments, profiles, holidays, bookings, booking_audit_logs, user_department_history | `08_database_smoke_tests.sql` | DB-2 returned exactly seven base tables | Verified | Exact boundary asserted. |
 | R-008 | No capacity-policy, employee, seat or other contradictory table | Approved ERD; audit baseline | — | — | catalog assertion | `08_database_smoke_tests.sql` | DB-2 found none | Verified | Capacity remains on departments. |
@@ -65,7 +70,7 @@ Evidence labels used in the matrix:
 | R-033 | Only one open history assignment may exist per profile | Historical traceability requirement; ERD | history display | profile update service | partial unique history index | SQL smoke | Second open assignment rejected | Verified | — |
 | R-034 | `updated_at` is maintained on mutable tables | ERD timestamp columns | refreshed query state | EF/Npgsql updates | touch triggers | DB-2 | Trigger set inspected and update smoke passed | Verified | Trigger helpers are not public. |
 | R-035 | Audit logs cannot be altered or deleted | Ch.2.1 retrospective inspection | — | no mutation endpoint | immutable audit trigger | SQL smoke | Direct update/delete both rejected | Verified | — |
-| R-036 | RLS is enabled on all seven application tables | Short Paper 2.2 | — | request-context settings | `05_create_rls_policies.sql` | SQL smoke/catalog | Local flags/policies checked; forged write RPC denied | Partially verified | Policy behavior with real Supabase JWT claims remains a hosted check. |
+| R-036 | RLS is enabled on all seven application tables | Short Paper 2.2 | — | request-context settings | `05_create_rls_policies.sql` | SQL smoke/catalog, HOST-DB-1 | Hosted flags were enabled on all seven; employee subject saw same-department and not cross-department profile data | Verified | Direct browser-role report/function access and audit mutation were also denied. |
 
 ## 3. Booking, capacity, holiday and reporting rules
 
@@ -107,16 +112,16 @@ Evidence labels used in the matrix:
 | R-065 | HR can access reports, but not holiday management | Ch.3.1; approved role decision | reports visible, holidays hidden | Reports/AdminOnly policies | report views/holiday policies | BE-1, E2E-1 | Report 200; holiday mutation 403 | Verified | — |
 | R-066 | Admin has all-department booking/calendar and may manage any booking | Ch.3.1, 2.2 | target selector/all calendar | admin authorization | admin RLS intent/RPC actor | BE-1, E2E-1 | Admin DIGI booking and global flows passed | Verified | — |
 | R-067 | Admin manages departments, holidays, profiles, users and roles | Ch.1, Ch.3.1 | all management routes | AdminOnly/policies | management tables/RLS | BE-1, E2E-1 | Direct/API/menu boundaries verified | Verified | Hosted Auth creation is split out below. |
-| R-068 | Admin user creation uses only the secure backend flow | Ch.3.1; production security decision | `AdminUsersPage.tsx` calls API | `AdminUsersController`, `SupabaseAdminService` | profile insert | BE-1, API-1 | Browser contains no Admin API call/service key; unique local request reached expected 503 | Partially verified | Hosted Admin API call is blocked. |
+| R-068 | Admin user creation uses only the secure backend flow | Ch.3.1; production security decision | `AdminUsersPage.tsx` calls API | `AdminUsersController`, `SupabaseAdminService` | profile insert | BE-1, API-1, HOST-ADMIN-1 | Hosted create returned 201 through ASP.NET; browser made no direct Admin API call and received no service credential | Verified | The deleted legacy Edge Function is not used or required. |
 | R-069 | Demo Mode uses actual backend and database seeded identities | Audit execution requirement supporting Chapter 4 | demo selection/auth context | demo auth handler/controller | deterministic seed profiles | E2E-1 | All 12 tests used live data path | Verified | No frontend mock database exists. |
 | R-070 | Demo role indicator and role switching work | Chapter 4 evidence requirement | layout/demo page | demo profiles endpoint | seed identities | E2E-1 | Indicator and employee-to-admin switch passed | Verified | — |
 | R-071 | Demo header authenticates only when enabled and is allowlisted | Security requirement derived from RBAC | API client | `DemoAuthenticationHandler` | active seeded profiles | BE-1 | Enabled live stack worked; disabled-mode test returned 401/404 | Verified | No production header bypass. |
-| R-072 | React uses Supabase only for login/session and sends Bearer tokens to ASP.NET | Short Paper 2.3 | `auth/supabase.ts`, `api/client.ts` | JWT bearer handler | — | FE-1 | Static call graph reviewed; Demo live path exercised | Partially verified | A real hosted session token was unavailable. |
-| R-073 | ASP.NET validates issuer, audience, lifetime and resolves the active profile | Short Paper 2.2, 2.3 | — | `Program.cs`, `ProfileClaimsTransformation.cs` | profile query | BE-1 | Static options/claims flow reviewed | Partially verified | Requires hosted asymmetric signing-key/JWKS token test. |
+| R-072 | React uses Supabase only for login/session and sends Bearer tokens to ASP.NET | Short Paper 2.3 | `auth/supabase.ts`, `api/client.ts` | JWT bearer handler | — | FE-1, HOST-AUTH-1 | Real browser login/session called ASP.NET with the access token; application data remained backend-only | Verified | Frontend source/bundle/request scan found no service-role credential or direct Admin API call. |
+| R-073 | ASP.NET validates issuer, audience, lifetime and resolves the active profile | Short Paper 2.2, 2.3 | — | `Program.cs`, `ProfileClaimsTransformation.cs` | profile query | BE-1, HOST-AUTH-1 | ES256 signature, `kid`, issuer, audience, subject, active profile, role, and department were verified; `/api/me` returned 200 | Verified | JWKS published two ECC P-256 / ES256 keys. |
 | R-074 | Service-role credential stays server-side | Production security requirement | only public anon-key env | backend options/Admin service | — | SEC-1 | Source/env/secret scan found no frontend service-role credential | Verified | Placeholder appears only in server example/docs. |
-| R-075 | Auth UUID and profile UUID match; duplicate checks and partial-failure compensation are safe | Approved user-management design | admin form | preflight, same UUID insert, Auth delete compensation | profile PK | BE-1 | In-process tests assert UUID equality and compensation; live duplicate returned 409 | Partially verified | Hosted Auth create/delete remains blocked. |
-| R-076 | Hosted Supabase JWT login and Admin create/delete work end to end | Short Paper 2.3 | production login/admin UI | JWT/Admin service | hosted Auth + database | — | No tenant credentials supplied | Blocked | Follow exact hosted steps in README/Open Tasks. |
-| R-077 | SQL/RLS/functions operate with hosted Supabase roles and pooler | Short Paper 2.1, 2.2 | — | connection settings | hosted Supabase PostgreSQL | — | Generic PostgreSQL is insufficient proof | Blocked | Run `00`-`08`, inspect grants/policies, and exercise real JWT claims. |
+| R-075 | Auth UUID and profile UUID match; duplicate checks and partial-failure compensation are safe | Approved user-management design | admin form | preflight, same UUID insert, Auth delete compensation | profile PK | BE-1, HOST-ADMIN-1 | Hosted UUID equality, duplicate validation, deactivation, and Auth cleanup passed; in-process compensation tests passed | Partially verified | A deliberately forced hosted profile-insert failure remains staging-only and was not injected into production. |
+| R-076 | Hosted Supabase JWT login and Admin create/delete work end to end | Short Paper 2.3 | production login/admin UI | JWT/Admin service | hosted Auth + database | HOST-AUTH-1, HOST-ADMIN-1 | Real ES256 login, backend Admin creation, profile deactivation, and disposable Auth deletion passed | Verified | Real administrator was not modified. |
+| R-077 | SQL/RLS/functions operate with hosted Supabase roles and pooler | Short Paper 2.1, 2.2 | — | connection settings | hosted Supabase PostgreSQL | HOST-DB-1 | Hosted catalog, grants, RLS scope, backend booking operations, and security denials passed | Verified | No destructive reset script was run. |
 
 ## 5. Frontend behavior, calendar, management and reports
 
@@ -133,7 +138,7 @@ Evidence labels used in the matrix:
 | R-086 | Department management supports create/edit/soft status and sorting | Ch.1, Ch.3.1 | `DepartmentsPage.tsx` | departments controller/service | departments | BE-1, FE-1, E2E-1 | Admin created an unlimited department, sorted, and soft-deactivated it in the UI | Verified | Interactive sorting and success feedback were added. |
 | R-087 | Employee management supports edits, department moves and assignment history | Ch.1, Ch.3.1 | `EmployeesPage.tsx` | profiles/history endpoints | profiles/history | BE-1, DB-2, FE-1, E2E-1 | Admin moved EMP004, observed history, and restored the profile in the UI | Verified | Inactive departments are disabled in the selector. |
 | R-088 | Holiday management supports create/edit/soft status and sorting | Ch.1, Ch.3.1 | `HolidaysPage.tsx` | holidays controller/service | holidays | BE-1, FE-1, E2E-1 | Admin created, sorted, and soft-deactivated a holiday in the UI | Verified | Booking-warning behavior is separately exercised. |
-| R-089 | User/role page creates users and lists roles through backend only | Ch.1, Ch.3.1 | `AdminUsersPage.tsx` | admin users/roles endpoints | roles/profiles | BE-1, API-1 | Roles/list path and local error behavior verified | Partially verified | Creation success needs hosted Supabase. |
+| R-089 | User/role page creates users and lists roles through backend only | Ch.1, Ch.3.1 | `AdminUsersPage.tsx` | admin users/roles endpoints | roles/profiles | BE-1, API-1, HOST-ADMIN-1 | Admin opened the real page; UI submission returned 201; hosted role/list/create paths and validation passed | Verified | Supporting option loading was explicitly awaited during browser automation. |
 | R-090 | Monthly calendar supports previous, next and today | Ch.3.1 | `CalendarPage.tsx`/FullCalendar | calendar endpoint | bookings | E2E-1 | All three controls exercised | Verified | Production calendar now opens current month; Demo evidence stays August 2026. |
 | R-091 | Calendar renders cross-day entries and permission-safe details/names | Ch.3.1 | calendar event/dialog | scoped calendar/detail endpoints | bookings | E2E-1, BE-1 | Seeded cross-day and detail dialog exercised; cross-department protected | Verified | — |
 | R-092 | All five reports use backend/database views and preserve source tables | Ch.3.1 | five report tabs/table/chart | report service/controller | five views | SQL smoke, E2E-1 | All five tabs rendered actual rows | Verified | Values are not hardcoded. |
@@ -163,13 +168,13 @@ Evidence labels used in the matrix:
 
 The denominator is all 108 rows above, including external deployment/evidence requirements:
 
-- Verified: 94 / 108 = **87.0% fully behavior-verified**.
-- Partially verified: 11 / 108 = 10.2%.
-- Blocked: 3 / 108 = 2.8%.
+- Verified: 103 / 108 = **95.4% fully behavior-verified**.
+- Partially verified: 4 / 108 = 3.7%.
+- Blocked: 1 / 108 = 0.9%.
 - Not implemented: 0. Incorrect: 0.
-- Counting partial evidence at one-half gives **92.1% weighted verification coverage**: `(94 + 11/2) / 108`.
+- Counting partial evidence at one-half gives **97.2% weighted verification coverage**: `(103 + 4/2) / 108`.
 
-The three blocked rows are hosted Supabase Auth, hosted database/RLS compatibility, and final Chapter 4 screenshot capture. They are not represented as completed.
+The only blocked row is final Chapter 4 screenshot capture. Hosted Supabase Auth/Admin and hosted database/RLS compatibility are now verified. The four partial rows are hosted compensation fault injection, exhaustive form loading/empty states, forced client-disconnect cancellation, and the planned React Router dependency migration.
 
 ## Corrective actions completed during this audit
 

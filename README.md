@@ -17,7 +17,7 @@ The approved Chapter 1–3 paper and ERD remain unchanged in `Doc/`. PostgreSQL 
 - Department assignment history maintained by a database trigger.
 - Five real PostgreSQL reporting views with per-column UI filters, sorting, pagination, and a capacity chart.
 - Demo Mode using seeded database identities and the real API/database.
-- Production Supabase Auth JWT validation and server-only Admin user creation (implemented and statically audited; hosted execution still required).
+- Production Supabase Auth JWT validation and server-only Admin user creation, verified against the hosted project with ES256/JWKS tokens and disposable Auth users.
 
 ## Roles
 
@@ -263,7 +263,11 @@ React stores the selected UUID locally and sends it as `X-Demo-Profile-Id`. The 
 
 React signs in with Supabase Auth, obtains the access token, and sends it as a Bearer token. ASP.NET validates it and resolves `co_desk.profiles`. Only `/api/admin/users` uses the server-side service-role credential. If Auth creation succeeds but profile insertion fails, the backend attempts to delete the new Auth user and logs a reconciliation identifier if compensation also fails.
 
-The API uses the issuer's OIDC discovery document and JWKS, so the Supabase project must use an asymmetric JWT signing key. A project still using the legacy shared-secret HS256 signer must be migrated to an asymmetric signing key before this validation path can be verified. Do not replace issuer/audience/lifetime validation with token decoding.
+The API uses the issuer's OIDC discovery document and JWKS, so the Supabase project must use an asymmetric JWT signing key. The hosted project was migrated from the Legacy HS256 signer to ECC P-256 / ES256 on 2026-08-04. A newly issued access token was cryptographically verified against the published JWKS, and its issuer, `authenticated` audience, subject, expiry, and application profile were accepted by ASP.NET. Do not replace issuer/audience/lifetime validation with token decoding.
+
+The unused legacy Supabase Edge Function `admin_create_user` was deleted. User creation remains `React -> POST /api/admin/users -> ASP.NET Core -> Supabase Admin API + co_desk.profiles`; the current architecture does not require or use an Edge Function for this flow.
+
+The Supabase Dashboard may continue to show the old HS256 key as the Previous Legacy key. Do not revoke it until all old HS256 access tokens have expired and every active client has refreshed to an ES256 token. That later revocation is a manual Dashboard action and is not automated by CoDesk.
 
 ## API areas
 
@@ -305,7 +309,7 @@ Use [docs/CHAPTER_4_EVIDENCE_GUIDE.md](docs/CHAPTER_4_EVIDENCE_GUIDE.md) for exa
 
 ## Current status and known limitations
 
-Independently audited and verified locally on 2026-08-04:
+Independently audited and verified locally and against the hosted Supabase project on 2026-08-04:
 
 - Ordered SQL scripts executed on a fresh PostgreSQL 14.21 database and again after population; the expanded rollback-only smoke suite passed both times.
 - A two-session capacity race committed exactly one booking and rejected the second with `capacity_exceeded`.
@@ -314,11 +318,16 @@ Independently audited and verified locally on 2026-08-04:
 - Fifteen Playwright journeys passed against the real temporary PostgreSQL + API + UI stack, including department/employee/holiday management.
 - Direct live API probes verified 400, 401, 403, 404, 409, duplicate preflight, and the expected unconfigured-Auth 503.
 - NuGet reported no vulnerable packages; npm retains the two documented moderate React Router findings.
+- The hosted project published two ECC P-256 / ES256 JWKS keys. A disposable real Auth login produced a valid ES256 signature and matching `kid`, issuer, `authenticated` audience, Auth subject, and active profile UUID; `GET /api/me` returned 200 with the database role and department.
+- Admin user creation through `/api/admin/users` returned 201 and created matching `auth.users.id` / `co_desk.profiles.profile_id` values plus the initial department-history row. Duplicate email/code, inactive department, invalid role, and short password requests returned 409/400 as designed.
+- Disposable employee, HR, and admin Auth users verified real UI menus and direct API boundaries. Hosted booking probes covered ownership, same-department calendar scope, admin cross-user booking, overlap, limited/unlimited capacity, holiday acknowledgement, audit access, and department history.
+- Hosted catalog and privilege inspection returned exactly seven tables, five report views, RLS on all seven tables, no forbidden table, no browser-role execution of critical booking functions, and no browser-role access to reporting views. Normal-role and owner audit-tampering attempts were rejected.
+- All disposable Auth identities were deleted, their retained audit/history profiles were inactive, their bookings were cancelled, and the temporarily changed limited capacity was restored. The real administrator was not modified.
+- The required commands were rerun after hosted verification: .NET build 0 warnings/errors with 19/19 tests; frontend typecheck/lint/build with 12/12 tests. Safe isolated production browser probes used Playwright; the checked-in Demo Mode suite was not run against Production Mode.
 
-Not executed against an external Supabase tenant because no credentials were supplied:
+Remaining manual evidence work:
 
-- Live Supabase script execution and hosted RLS inspection.
-- Production JWT login and Supabase Admin user creation/compensation.
-- Final Chapter 4 screenshots in the user's Supabase project.
+- Capture the final Chapter 4 screenshots in the intended Supabase project without credentials, tokens, UUIDs, or real email addresses.
+- After all legacy HS256 tokens have expired and clients have refreshed, decide manually in the Supabase Dashboard whether to revoke the Previous Legacy key.
 
 See [docs/VERIFICATION_AND_REQUIREMENT_MATRIX.md](docs/VERIFICATION_AND_REQUIREMENT_MATRIX.md) for the 108-row independent traceability matrix and [docs/ai-context/HANDOFF.md](docs/ai-context/HANDOFF.md) for the exact handoff state.

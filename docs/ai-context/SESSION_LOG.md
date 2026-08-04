@@ -96,9 +96,47 @@ Timezone: Asia/Bangkok.
 - `npm audit --omit=dev`: exit 1 with two moderate React Router package findings; npm offers only a breaking v7 upgrade. Actual surface and remaining action are recorded in README/DECISIONS/OPEN_TASKS.
 - Secret/config scan found no committed credential. The ignored `frontend/.env.test` contains only the Demo flag and localhost API URL.
 
-## Remaining limitations
+## Remaining limitations at the local-audit checkpoint
 
-- No external Supabase tenant/credentials were supplied, so hosted SQL/RLS roles, real asymmetric JWT validation, and Admin Auth create/delete/compensation are not claimed as executed.
+- At this checkpoint no external Supabase tenant/credentials had been supplied, so hosted SQL/RLS roles, real asymmetric JWT validation, and Admin Auth create/delete/compensation were not yet claimed as executed. The later hosted-verification section below supersedes this limitation.
 - Final Chapter 4 screenshots were not captured. The exact safe capture sequence remains in `docs/CHAPTER_4_EVIDENCE_GUIDE.md`.
 - Optional UI automation gaps are recorded as Partially verified in the matrix rather than overstated.
 - Stopped the audit API, Vite server, and PostgreSQL cluster after final verification.
+
+# Hosted Supabase Production Verification — 2026-08-04
+
+Timezone: Asia/Bangkok.
+
+## Production configuration and authentication
+
+- Confirmed the ignored backend/frontend environment files select Production Mode, use one matching Supabase project URL, configure the expected `/auth/v1` issuer and `authenticated` audience, connect through the SSL-required Supabase pooler, keep the service-role credential only in the backend, and expose only the public anon credential to Vite.
+- Confirmed the running API/UI returned 200 for health/root, 401 for unauthenticated `/api/me`, and 404 for the disabled Demo endpoint.
+- Supabase OIDC discovery matched the configured issuer. JWKS published two ECC P-256 keys, both ES256.
+- Created an isolated real Supabase Auth/profile fixture without changing the real administrator. Password login succeeded. The access token used `alg=ES256`; its `kid` matched JWKS; its ES256 signature verified; issuer and `authenticated` audience matched configuration; and its subject matched both the Auth user and active application profile.
+- `GET /api/me` returned 200, and its profile UUID, role, active state, and department matched the hosted database.
+- The project had already migrated from Legacy HS256 to ECC P-256 / ES256. The Previous Legacy key was not revoked or modified.
+
+## Hosted Admin user creation and RBAC
+
+- An admin opened the real User Management UI, and a UI submission to `POST /api/admin/users` returned 201. Direct authenticated follow-up probes created disposable employee, HR, and admin users through the same ASP.NET endpoint.
+- For every completed creation, `auth.users.id` equaled `co_desk.profiles.profile_id`; requested identity/department/role/status fields matched; and exactly one open initial department-history row existed.
+- Duplicate email and employee code returned 409. Inactive department, invalid role, and a seven-character temporary password returned 400 before Auth creation.
+- Browser request inspection found no direct Supabase Admin API call and no service-role credential. A post-build scan found no service-role credential in frontend source or output.
+- Real employee, HR, and admin logins each returned `/api/me` 200 with ES256 tokens. Thai UI menus matched the role matrix.
+- Direct API probes verified employee self-only booking/edit/cancel, same-department calendar scope, and denial of reports/departments/users; HR self-only booking, employee-profile/department/report access, and denial of Auth creation/role assignment/holiday/audit access; and admin cross-user booking plus department/holiday/profile/role/user/report/audit access.
+
+## Hosted database and booking rules
+
+- Catalog inspection returned the exact seven approved `co_desk` tables, five report views, RLS enabled on all seven tables, zero forbidden tables, and the three approved role codes.
+- `PUBLIC`, `anon`, and `authenticated` had no execution access to the six critical booking/check functions. Browser roles had no direct select access to reporting views.
+- Hosted RLS exposed same-department profiles and hid a cross-department profile for an employee subject. Direct report/function access as `authenticated` failed.
+- Audit updates failed both as the normal browser role and as the database owner because the immutable trigger rejected mutation.
+- Backend operations verified overlap rejection, limited capacity after a temporary capacity-1 setting, restored limited capacity, unlimited capacity, holiday acknowledgement, admin booking for another active employee, and closed/open department-history transitions.
+
+## Cleanup and final commands
+
+- Cancelled all disposable bookings, restored the limited department's original capacity, deactivated every disposable application profile, and deleted every disposable Supabase Auth identity. A final hosted query returned zero active QA profiles, zero active QA bookings, and zero QA Auth users. The real administrator was never changed.
+- `dotnet restore && dotnet build CoDesk.sln && dotnet test CoDesk.sln`: build 0 warnings/errors; 8 unit + 11 integration = 19 passed.
+- `npm install && npm run typecheck && npm run lint && npm run test && npm run build`: all completed; 12 frontend tests passed; npm retained the two already documented moderate React Router findings.
+- Safe production browser probes were executed with Playwright against the real UI/API/Auth/database. The checked-in `demo-mode.spec.ts` suite was not run against Production Mode because it requires the deliberately disabled Demo header.
+- No application source defect was reproduced, so no source code or SQL was changed. Documentation was updated only with verified results.
