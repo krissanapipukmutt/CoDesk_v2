@@ -87,8 +87,10 @@ npm run test:e2e
 
 Expected local verified totals from the implementation session:
 
-- xUnit: 16 passed (8 unit + 8 API integration).
-- Vitest/RTL: 8 passed.
-- Playwright: 4 passed against the real temporary database/API/UI stack.
-- SQL smoke script: completed and rolled back without errors.
+- xUnit: 19 passed (8 unit + 11 in-process API tests).
+- Vitest/RTL: 12 passed.
+- Playwright: 15 passed against the real temporary database/API/UI stack.
+- SQL smoke script: completed and rolled back without errors on both a fresh and populated PostgreSQL 14.21 database.
+- Concurrency evidence: one booking committed and the concurrent capacity contender returned `capacity_exceeded`.
 
+These are the independent 2026-08-04 totals. For requirement status and limitations, include `docs/VERIFICATION_AND_REQUIREMENT_MATRIX.md` in the Chapter 4 evidence package.

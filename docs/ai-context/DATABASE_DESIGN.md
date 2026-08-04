@@ -14,7 +14,7 @@ Circular bootstrap is safe: departments are created with nullable creator, profi
 
 - UUID primary keys and deterministic UUIDs for demo fixtures.
 - Unique role/department/employee/email/holiday business keys.
-- Checks for capacity mode, booking mode/status/dates/cancellation state, audit action, and history dates.
+- Checks for capacity mode, booking mode/status/dates/cancellation state, Bangkok business-date/timestamp consistency, audit action, and history dates.
 - Partial unique index allowing one open department assignment per profile.
 - Partial GiST exclusion constraint preventing active overlap per target profile.
 - Foreign-key indexes and active/report query indexes.
@@ -22,7 +22,7 @@ Circular bootstrap is safe: departments are created with nullable creator, profi
 
 ## Booking transaction
 
-`create_booking`, `update_booking`, and `cancel_booking` are security-definer PL/pgSQL functions with a safe search path. Create/update:
+`create_booking`, `update_booking`, and `cancel_booking` are security-definer PL/pgSQL functions with a safe search path. They are private to the backend database principal: execution is revoked from `PUBLIC`, `anon`, and `authenticated`. When a request-context profile/JWT subject is present, it must match the supplied actor. Create/update:
 
 1. Validate active actor/target and self-vs-admin rule.
 2. Normalize the Bangkok interval/business dates.
@@ -32,9 +32,8 @@ Circular bootstrap is safe: departments are created with nullable creator, profi
 6. Check projected daily department totals, excluding the updated row.
 7. Write the booking and audit log atomically.
 
-The exclusion constraint is a final concurrency backstop for employee overlap.
+The exclusion constraint is a final concurrency backstop for employee overlap. A department-row `FOR UPDATE` lock serializes capacity decisions; an independent two-session audit confirmed that concurrent requests cannot both consume the last place.
 
 ## Reports and RLS
 
-The five views expand touched days or aggregate the approved tables only. RLS policies cover all seven tables for self/department/admin visibility and HR/admin management. Report views are backend-only to avoid owner-view bypass on PostgreSQL 14-compatible view definitions.
-
+The five views expand touched days or aggregate the approved tables only. RLS policies cover all seven tables for self/department/admin visibility and HR/admin insert/update management; business records are soft-deleted, so no management delete policies are granted. Report views are backend-only to avoid owner-view bypass on PostgreSQL 14-compatible view definitions. Hosted Supabase role/JWT behavior still requires tenant verification.

@@ -13,10 +13,11 @@ Approved baseline documents read in full:
 - `Doc/Short paper Codesk_1_3_v3.pdf` — five pages covering problem, relational integrity, RBAC/RLS, React/ASP.NET/Supabase, booking rules, calendar visibility, reports, Bangkok dates, and the seven-table design.
 - `Doc/ERD.pdf` — one-page relationship diagram containing the exact seven tables and approved columns.
 
-The PDFs were text-extracted and the ERD was visually inspected before implementation. They were not edited. SHA-256 values recorded after implementation:
+The PDFs were text-extracted and the ERD was visually inspected before implementation, then independently reread/rendered during the 2026-08-04 audit. They were not edited. SHA-256 values rechecked after the audit:
 
 - ERD: `da00f37ef3b1752744815b5ac820e4c4baad4d8f20d0520f3bbd02add39a1ca0`
 - Short paper: `a859d6500ab099ac4f7598fd7ce0575a93f1a575a71aabfcd1eac32e41a0c104`
 
 Chapter 1–3 and the ERD are the approved academic baseline. Application source belongs outside `Doc/`.
 
+The independent requirement-by-requirement trace is `docs/VERIFICATION_AND_REQUIREMENT_MATRIX.md`; local implementation presence is not treated as hosted Supabase proof.

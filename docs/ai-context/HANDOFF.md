@@ -1,8 +1,8 @@
 # Handoff
 
-## Exact status
+## Exact status — independent audit 2026-08-04
 
-The complete CoDesk implementation is present and locally verified. No user-supplied source existed before this session; both approved PDFs are unchanged.
+The CoDesk implementation is present, independently reviewed from the approved PDFs and source, corrected, and locally reverified. Both approved PDFs are unchanged and retain their recorded SHA-256 hashes.
 
 Works now:
 
@@ -10,7 +10,7 @@ Works now:
 - Booking conflict, capacity, holiday, update/cancel, audit, and history logic.
 - Five queryable report views.
 - Demo Mode through actual database/API identities with backend role checks.
-- Production JWT validation and server-only Supabase Admin user workflow in source.
+- Production JWT validation and server-only Supabase Admin user workflow in source; hosted execution is not claimed.
 - All required Thai UI pages and responsive role menus.
 - Local automated suites and real-stack browser flows.
 
@@ -22,11 +22,15 @@ Requires external configuration/testing:
 
 ## Verified results
 
-- PostgreSQL 14: scripts `00`–`08` succeeded; smoke suite completed and rolled back.
-- .NET: build 0 warnings/errors; 16/16 tests passed.
-- Frontend: strict typecheck passed; lint passed; 8/8 Vitest tests passed; production build passed.
-- Playwright: 4/4 passed against real temporary PostgreSQL + API + UI.
-- Dependency audit: no high/critical production finding after selecting React Router 6; two moderate advisories remain and are risk-documented in README/DECISIONS.
+- PostgreSQL 14.21: scripts `00`–`08` succeeded on a fresh database and again after population; the expanded smoke suite completed and rolled back both times.
+- Concurrency: two transactions contending on OPS capacity 1 produced one active booking and one structured `capacity_exceeded` result; the fixture was cancelled and capacity restored.
+- Database privilege regression: a forged `authenticated` write-RPC call that succeeded before the fix now returns permission denied.
+- .NET: build 0 warnings/errors; 19/19 tests passed (8 unit + 11 in-process API tests).
+- Frontend: strict typecheck and lint passed; 12/12 Vitest tests passed; production build passed.
+- Playwright: 15/15 passed against a real PostgreSQL + API + UI stack, including live department/employee/holiday management.
+- Direct API: 400, 401, 403, 404, 409 and expected unconfigured-Auth 503 responses were observed with structured bodies.
+- Dependency audit: NuGet found no vulnerable package. npm retains two moderate React Router package findings; the breaking v7 migration was intentionally not forced.
+- Requirement matrix: 94/108 Verified (87.0%), 11 Partially verified, 3 Blocked; weighted verification coverage 92.1%.
 
 ## Run
 
@@ -81,7 +85,8 @@ npm run test:e2e
 ## Known limitations
 
 - No live Supabase credentials were available, so hosted Auth/Admin/RLS behavior is implemented but not claimed as executed.
+- The production JWT path uses Supabase OIDC/JWKS and therefore requires an asymmetric project signing key; legacy HS256 signing is not supported by this validation path.
 - Admin user creation returns 503 in Demo Mode unless valid server Supabase credentials are intentionally supplied; it does not fabricate Auth users.
-- React Router's two moderate audit advisories are documented; the app does not use their SSR/data-action paths or untrusted navigation targets.
-- Temporary PostgreSQL data directories created under `/tmp/codesk-v2-*` may remain on the host after the stopped verification servers; they contain only disposable local test data.
-
+- React Router's two moderate package findings are documented; the app does not use SSR hydration or untrusted navigation targets, but a planned breaking upgrade remains open.
+- Some loading/empty-state branches, forced client cancellation, and hosted user creation remain partially rather than fully exercised; they are not represented as complete in the matrix.
+- The stopped audit PostgreSQL data directory under `/tmp/codesk-audit-pg.*` may remain on the host; it contains only disposable local test data.

@@ -56,3 +56,49 @@ Timezone: Asia/Bangkok.
 - Added all required AI-context files and Chapter 4 evidence guide.
 - Recorded final SHA-256 hashes for the unchanged approved PDFs.
 - No source code was written under `Doc/`.
+
+# Independent Audit and Correction — 2026-08-04
+
+Timezone: Asia/Bangkok.
+
+## Source-of-truth inspection
+
+- Independently reread the five-page Short Paper, extracted all text, rendered and visually inspected the one-page ERD, read `AGENTS.md`, README, Chapter 4 guide, all AI-context files, every ordered SQL script, and the complete backend/frontend/test/configuration source tree.
+- Confirmed there is no `skills-lock.json` or installed project skill, and did not modify either approved PDF.
+- Recomputed the approved PDF hashes; both exactly match `REQUIREMENTS_SOURCE.md`.
+- Created `docs/VERIFICATION_AND_REQUIREMENT_MATRIX.md` with 108 individually traced requirements and explicit evidence/status rules.
+
+## Defects confirmed and fixed
+
+- Proved that `authenticated` could execute a security-definer booking RPC with a forged admin actor UUID. Revoked critical RPC/check/helper execution from public/browser roles and bound the actor to request context when present. The same exploit regression now returns permission denied.
+- Added database checks connecting stored booking business dates to Bangkok timestamps and enforcing exact single-day storage; scoped idempotent constraint discovery to the correct relation; changed department-history trigger dating to Bangkok; removed hard-delete RLS intent for soft-delete entities; and revoked trigger/helper execution privileges.
+- Expanded SQL smoke tests for cross-day capacity on every date, unlimited capacity, update/cancel audit actions, holiday acknowledgement, audit immutability, history transitions, public privileges, and correctness of all five views including cancelled records.
+- Removed the insecure default `postgres/postgres` connection fallback. Startup now requires explicit server configuration.
+- Added admin-user duplicate/reference preflight before Supabase Auth, consistent 409/400 exception mapping, actual-admin history attribution, inactive/invalid department and role validation, Auth duplicate mapping, same-UUID verification, and compensation tests.
+- Corrected unhandled production-login errors, misleading query-empty states, browser-timezone-sensitive date-only formatting, Bangkok default dates, production calendar month selection, inactive department selection, management sorting/success feedback, and booking-card accessibility/test targeting.
+- Replaced weak browser coverage with 15 live-stack journeys and expanded component tests from 8 to 12. The added journeys include department creation/soft-deactivation, employee department history with restoration, and holiday creation/soft-deactivation.
+
+## Final database and live-stack evidence
+
+- Started PostgreSQL 14.21 on `127.0.0.1:55436`, created a fresh `codesk_final` database, and executed scripts `00`–`08` with `ON_ERROR_STOP`. Re-executed the same sequence against the populated database; both runs passed and smoke fixtures rolled back.
+- Ran a two-session capacity race with OPS capacity 1. Session A held the department lock and created one booking; session B waited and returned structured `capacity_exceeded`. The final active count was one; the fixture was cancelled and capacity restored to three.
+- Ran ASP.NET on port 5080 and Vite on 5173 against `codesk_final`. The final `npx playwright test` passed 15/15 in 17.2 seconds.
+- Direct report queries verified pagination (`page=2`, `pageSize=1`, `total=7`) and a combined date/department filter returning only the expected 2026-08-04 OPS row.
+- Live direct API probes observed: unauthenticated 401; employee/HR forbidden 403; missing 404; validation 400; duplicate admin profile 409 before Auth; genuinely new admin profile 503 because Supabase Admin was intentionally unconfigured.
+- The separate disabled-Demo verification returned 404 for the demo endpoint and 401 for a demo-header identity. The in-process regression test remains in the suite.
+
+## Final build, test and security results
+
+- `dotnet restore CoDesk.sln && dotnet build CoDesk.sln --no-restore && dotnet test CoDesk.sln --no-build`: build 0 warnings/errors; 8 unit + 11 API = 19 passed, 0 failed, 0 skipped.
+- `npm run typecheck && npm run lint && npm test -- --run && npm run build`: typecheck/lint/build passed; 12 tests passed, 0 failed.
+- `npx playwright test`: 15 passed, 0 failed, 0 skipped against the real database/API/UI stack.
+- `dotnet list CoDesk.sln package --vulnerable --include-transitive`: no vulnerable packages for all six projects.
+- `npm audit --omit=dev`: exit 1 with two moderate React Router package findings; npm offers only a breaking v7 upgrade. Actual surface and remaining action are recorded in README/DECISIONS/OPEN_TASKS.
+- Secret/config scan found no committed credential. The ignored `frontend/.env.test` contains only the Demo flag and localhost API URL.
+
+## Remaining limitations
+
+- No external Supabase tenant/credentials were supplied, so hosted SQL/RLS roles, real asymmetric JWT validation, and Admin Auth create/delete/compensation are not claimed as executed.
+- Final Chapter 4 screenshots were not captured. The exact safe capture sequence remains in `docs/CHAPTER_4_EVIDENCE_GUIDE.md`.
+- Optional UI automation gaps are recorded as Partially verified in the matrix rather than overstated.
+- Stopped the audit API, Vite server, and PostgreSQL cluster after final verification.

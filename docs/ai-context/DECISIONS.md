@@ -16,5 +16,8 @@
 14. RLS uses JWT/app request settings for defense in depth. Report views are not granted to browser-authenticated database roles; reports are served by HR/admin API endpoints.
 15. EF Core maps the authoritative tables but does not create/migrate them.
 16. Report column filters are sent to the backend as an allowlisted JSON map; identifiers never come directly from untrusted input.
-17. React Router 6 is retained for the client-only SPA. npm currently reports two moderate router advisories; the relevant SSR/data-router features are not used, and the current 7.x alternative has a high advisory. This must be reassessed on dependency updates.
-
+17. React Router 6 is retained for the client-only SPA. npm currently reports two moderate package findings involving redirects and SSR hydration deserialization; the affected surfaces are not used, but the breaking v7 migration must be planned and tested rather than forced automatically.
+18. Critical security-definer booking/check functions are backend-private and explicitly revoked from `PUBLIC`, `anon`, and `authenticated`; RLS is defense in depth, not permission to call write RPCs with a caller-supplied actor UUID.
+19. The booking table enforces that business-date columns match `start_at`/`end_at` in Asia/Bangkok and that single-day storage is exactly local midnight to next midnight.
+20. Admin user creation validates duplicate codes/emails, active departments, and roles before calling Supabase Auth. The Auth UUID is the profile UUID; a failed profile insert triggers Auth deletion compensation, and history attribution uses the actual admin actor.
+21. Production JWT validation uses Supabase OIDC/JWKS and requires an asymmetric signing key. Legacy shared-secret HS256 projects must migrate before the hosted path is treated as verified.

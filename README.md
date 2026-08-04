@@ -17,7 +17,7 @@ The approved Chapter 1–3 paper and ERD remain unchanged in `Doc/`. PostgreSQL 
 - Department assignment history maintained by a database trigger.
 - Five real PostgreSQL reporting views with per-column UI filters, sorting, pagination, and a capacity chart.
 - Demo Mode using seeded database identities and the real API/database.
-- Production Supabase Auth JWT validation and server-only Admin user creation.
+- Production Supabase Auth JWT validation and server-only Admin user creation (implemented and statically audited; hosted execution still required).
 
 ## Roles
 
@@ -263,6 +263,8 @@ React stores the selected UUID locally and sends it as `X-Demo-Profile-Id`. The 
 
 React signs in with Supabase Auth, obtains the access token, and sends it as a Bearer token. ASP.NET validates it and resolves `co_desk.profiles`. Only `/api/admin/users` uses the server-side service-role credential. If Auth creation succeeds but profile insertion fails, the backend attempts to delete the new Auth user and logs a reconciliation identifier if compensation also fails.
 
+The API uses the issuer's OIDC discovery document and JWKS, so the Supabase project must use an asymmetric JWT signing key. A project still using the legacy shared-secret HS256 signer must be migrated to an asymmetric signing key before this validation path can be verified. Do not replace issuer/audience/lifetime validation with token decoding.
+
 ## API areas
 
 - `/api/me`, `/api/demo/profiles`
@@ -292,10 +294,10 @@ Errors use ProblemDetails-compatible JSON and meaningful 400, 401, 403, 404, 409
 - Secrets and `.env` files are ignored; only placeholder examples are committed.
 - Demo identity headers are disabled outside explicit Demo Mode.
 - The backend is the primary authorization boundary; RLS adds table-level defense in depth.
-- Security-definer database functions set a safe `search_path` and validate the booking actor.
+- Security-definer database functions set a safe `search_path`; critical booking/check functions are revoked from `PUBLIC`, `anon`, and `authenticated`, and write RPC actors are bound to request identity when a request context is present.
 - Audit logs are immutable through a database trigger and unavailable in normal management UI.
 - Report views are backend-only and not granted to browser-authenticated database users.
-- Current npm audit reports two moderate React Router 6 advisories involving redirect/SSR error deserialization. CoDesk is a client-only SPA with hardcoded internal navigation and does not use React Router SSR/data actions; upgrading to the current 7.x line introduces a currently reported high-severity RSC/CSRF advisory. Reassess when upstream publishes a version clear of both advisory sets.
+- Current `npm audit --omit=dev` reports two moderate React Router package findings covering protocol-relative/backslash redirects and SSR hydration deserialization. CoDesk is a client-only SPA with fixed internal navigation and does not use React Router SSR hydration data, which reduces exposure, but does not remove the advisory. The offered fix is the breaking React Router 7 migration and was not applied automatically; plan and test that migration separately.
 
 ## Chapter 4 evidence checklist
 
@@ -303,12 +305,15 @@ Use [docs/CHAPTER_4_EVIDENCE_GUIDE.md](docs/CHAPTER_4_EVIDENCE_GUIDE.md) for exa
 
 ## Current status and known limitations
 
-Completed and verified locally on 2026-08-03:
+Independently audited and verified locally on 2026-08-04:
 
-- Ordered SQL scripts executed on an isolated PostgreSQL 14 cluster; smoke suite passed.
-- .NET solution restored/built with zero warnings; 16 tests passed.
-- Frontend strict typecheck, lint, 8 component tests, and production build passed.
-- Four Playwright tests passed against the real temporary PostgreSQL + API + UI stack.
+- Ordered SQL scripts executed on a fresh PostgreSQL 14.21 database and again after population; the expanded rollback-only smoke suite passed both times.
+- A two-session capacity race committed exactly one booking and rejected the second with `capacity_exceeded`.
+- .NET solution restored/built with zero warnings; 19 tests passed (8 unit + 11 in-process API tests).
+- Frontend strict typecheck, lint, 12 component tests, and production build passed.
+- Fifteen Playwright journeys passed against the real temporary PostgreSQL + API + UI stack, including department/employee/holiday management.
+- Direct live API probes verified 400, 401, 403, 404, 409, duplicate preflight, and the expected unconfigured-Auth 503.
+- NuGet reported no vulnerable packages; npm retains the two documented moderate React Router findings.
 
 Not executed against an external Supabase tenant because no credentials were supplied:
 
@@ -316,5 +321,4 @@ Not executed against an external Supabase tenant because no credentials were sup
 - Production JWT login and Supabase Admin user creation/compensation.
 - Final Chapter 4 screenshots in the user's Supabase project.
 
-See [docs/ai-context/HANDOFF.md](docs/ai-context/HANDOFF.md) for the exact handoff state.
-
+See [docs/VERIFICATION_AND_REQUIREMENT_MATRIX.md](docs/VERIFICATION_AND_REQUIREMENT_MATRIX.md) for the 108-row independent traceability matrix and [docs/ai-context/HANDOFF.md](docs/ai-context/HANDOFF.md) for the exact handoff state.

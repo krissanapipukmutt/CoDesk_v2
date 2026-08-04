@@ -200,11 +200,103 @@ test('all five reports render backend rows, column filters, sorting, and source 
   await expect(page.locator('tbody tr').first()).toBeVisible()
 })
 
+test('admin creates, sorts, and soft-deactivates a department', async ({ page }) => {
+  const code = `PW${Date.now().toString().slice(-8)}`
+  await selectDemo(page, 'ผู้ดูแลระบบ')
+  await page.getByText('จัดการฝ่ายงาน', { exact: true }).first().click()
+  await page.getByRole('button', { name: 'เพิ่มฝ่ายงาน' }).click()
+  let dialog = page.getByRole('dialog')
+  await dialog.getByLabel('รหัสฝ่าย').fill(code)
+  await dialog.getByLabel('ชื่อฝ่าย').fill('Playwright Audit Department')
+  await dialog.getByLabel('รูปแบบความจุ').selectOption('unlimited')
+  await dialog.getByRole('button', { name: 'บันทึก' }).click()
+  await expect(page.getByText('เพิ่มฝ่ายงานสำเร็จ')).toBeVisible()
+
+  await page.getByLabel('ค้นหาฝ่ายงาน').fill(code)
+  const row = page.getByRole('row').filter({ hasText: code })
+  await expect(row).toContainText('ไม่จำกัด')
+  await page.getByLabel('เรียงฝ่ายงานตาม').selectOption('isActive')
+  await page.getByRole('button', { name: 'น้อย → มาก' }).click()
+  await row.getByRole('button', { name: 'แก้ไข' }).click()
+  dialog = page.getByRole('dialog')
+  await dialog.getByLabel('เปิดใช้งานฝ่าย').uncheck()
+  await dialog.getByRole('button', { name: 'บันทึก' }).click()
+  await expect(page.getByText('แก้ไขฝ่ายงานสำเร็จ')).toBeVisible()
+  await expect(page.getByRole('row').filter({ hasText: code })).toContainText('ปิดใช้งาน')
+})
+
+test('admin edits an employee department, sees history, and restores the profile', async ({ page }) => {
+  await selectDemo(page, 'ผู้ดูแลระบบ')
+  await page.getByText('จัดการพนักงาน', { exact: true }).first().click()
+  await page.getByLabel('ค้นหาพนักงาน').fill('EMP004')
+  let row = page.getByRole('row').filter({ hasText: 'EMP004' })
+  await row.getByRole('button', { name: 'แก้ไข' }).click()
+  let dialog = page.getByRole('dialog')
+  const nameInput = dialog.getByLabel('ชื่อ-นามสกุล')
+  const originalName = await nameInput.inputValue()
+  const department = dialog.getByLabel('ฝ่ายงาน')
+  const originalDepartment = await department.inputValue()
+  const alternateDepartment = originalDepartment === '20000000-0000-0000-0000-000000000002'
+    ? '20000000-0000-0000-0000-000000000001'
+    : '20000000-0000-0000-0000-000000000002'
+  await nameInput.fill(`${originalName} Audit`)
+  await department.selectOption(alternateDepartment)
+  await dialog.getByRole('button', { name: 'บันทึก' }).click()
+  await expect(page.getByText('แก้ไขข้อมูลพนักงานสำเร็จ')).toBeVisible()
+
+  row = page.getByRole('row').filter({ hasText: 'EMP004' })
+  await expect(row).toContainText(`${originalName} Audit`)
+  await row.getByRole('button', { name: 'แก้ไข' }).click()
+  dialog = page.getByRole('dialog')
+  await expect(dialog.getByText('ประวัติฝ่ายงาน')).toBeVisible()
+  await expect.poll(() => dialog.getByText(/· โดย/).count()).toBeGreaterThanOrEqual(2)
+  await dialog.getByLabel('ชื่อ-นามสกุล').fill(originalName)
+  await dialog.getByLabel('ฝ่ายงาน').selectOption(originalDepartment)
+  await dialog.getByRole('button', { name: 'บันทึก' }).click()
+  await expect(page.getByRole('row').filter({ hasText: 'EMP004' })).toContainText(originalName)
+})
+
+test('admin creates, sorts, and soft-deactivates a holiday', async ({ page, request }) => {
+  const response = await request.get(`${apiBase}/api/holidays?pageSize=500&includeInactive=true`, {
+    headers: { 'X-Demo-Profile-Id': ids.admin },
+  })
+  const existing = await response.json() as { items: Array<{ holidayDate: string }> }
+  const used = new Set(existing.items.map((holiday) => holiday.holidayDate))
+  let date = ''
+  for (let day = 1; day <= 28 && !date; day += 1) {
+    const candidate = `2090-01-${String(day).padStart(2, '0')}`
+    if (!used.has(candidate)) date = candidate
+  }
+  expect(date).not.toBe('')
+
+  await selectDemo(page, 'ผู้ดูแลระบบ')
+  await page.getByText('จัดการวันหยุด', { exact: true }).first().click()
+  await page.getByRole('button', { name: 'เพิ่มวันหยุด' }).click()
+  let dialog = page.getByRole('dialog')
+  await dialog.getByLabel('วันที่').fill(date)
+  await dialog.getByLabel('ชื่อวันหยุด').fill(`Playwright Audit ${date}`)
+  await dialog.getByLabel('รายละเอียด').fill('Live management verification')
+  await dialog.getByRole('button', { name: 'บันทึก' }).click()
+  await expect(page.getByText('เพิ่มวันหยุดสำเร็จ')).toBeVisible()
+
+  await page.getByLabel('ค้นหาวันหยุด').fill(`Playwright Audit ${date}`)
+  const row = page.getByRole('row').filter({ hasText: date })
+  await page.getByLabel('เรียงวันหยุดตาม').selectOption('isActive')
+  await row.getByRole('button', { name: 'แก้ไข' }).click()
+  dialog = page.getByRole('dialog')
+  await dialog.getByLabel('เปิดใช้งาน').uncheck()
+  await dialog.getByRole('button', { name: 'บันทึก' }).click()
+  await expect(page.getByText('แก้ไขวันหยุดสำเร็จ')).toBeVisible()
+  await expect(page.getByRole('row').filter({ hasText: date })).toContainText('ปิดใช้งาน')
+})
+
 test('mobile navigation remains keyboard-labelled and usable', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await selectDemo(page, 'พนักงาน')
   await page.getByRole('button', { name: 'เปิดเมนู' }).click()
   await expect(page.locator('a:visible').filter({ hasText: 'จองเข้าออฟฟิศ' })).toBeVisible()
-  await page.getByRole('button', { name: 'ปิดเมนู', exact: true }).click()
+  await page.getByRole('button', { name: 'ปิดเมนู', exact: true }).click({
+    position: { x: 360, y: 20 },
+  })
   await expect(page.getByRole('button', { name: 'เปิดเมนู' })).toBeVisible()
 })

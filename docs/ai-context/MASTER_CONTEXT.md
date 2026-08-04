@@ -2,9 +2,9 @@
 
 ## Current state
 
-CoDesk is a complete greenfield implementation created on 2026-08-03 from the approved five-page Chapter 1–3 paper, one-page ERD, and the execution prompt. The repository contains authoritative PostgreSQL SQL, a .NET 10 API, a React/TypeScript frontend, Demo Mode, production Supabase Auth integration, automated tests, and project/evidence documentation.
+CoDesk is a greenfield implementation created on 2026-08-03 from the approved five-page Chapter 1–3 paper and one-page ERD. It was independently audited and corrected on 2026-08-04. The repository contains authoritative PostgreSQL SQL, a .NET 10 API, a React/TypeScript frontend, Demo Mode, production Supabase Auth integration, automated tests, and project/evidence documentation.
 
-Local verification is complete: SQL scripts/smoke tests executed on PostgreSQL 14, the .NET solution built with 16 passing tests, the frontend typechecked/linted/built with 8 passing component tests, and 4 Playwright tests passed against a real temporary database/API/UI stack. External Supabase verification remains because no tenant credentials were supplied.
+Local verification is complete: SQL scripts and the expanded smoke suite passed on a fresh and populated PostgreSQL 14.21 database; an explicit two-session capacity race passed; the .NET solution built cleanly with 19 passing tests; the frontend typechecked/linted/built with 12 passing component tests; and 15 Playwright journeys passed against a real temporary database/API/UI stack. The 108-row traceability matrix records 94 Verified, 11 Partially verified, and 3 Blocked requirements. External Supabase execution and final screenshots remain because no tenant credentials were supplied.
 
 ## Non-negotiable requirements
 
@@ -32,6 +32,7 @@ Technologies: PostgreSQL/Supabase, .NET 10, Npgsql/EF Core, React 19, TypeScript
 ## Key paths
 
 - Setup and commands: `README.md`
+- Independent traceability: `docs/VERIFICATION_AND_REQUIREMENT_MATRIX.md`
 - Exact current handoff: `docs/ai-context/HANDOFF.md`
 - Database explanation: `docs/ai-context/DATABASE_DESIGN.md`
 - Permission rules: `docs/ai-context/ROLE_PERMISSION_MATRIX.md`
@@ -47,4 +48,3 @@ Technologies: PostgreSQL/Supabase, .NET 10, Npgsql/EF Core, React 19, TypeScript
 3. Make SQL/API/UI changes together when a contract changes.
 4. Run SQL smoke tests on an isolated database, `dotnet test`, and all frontend checks.
 5. Update README, SESSION_LOG, HANDOFF, and OPEN_TASKS with actual—not assumed—results.
-

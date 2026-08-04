@@ -17,3 +17,6 @@ The user requested one continuous implementation run by a senior full-stack/data
 
 The full original prompt was supplied as an attachment outside the repository. This summary is faithful but avoids duplicating the very long execution prompt verbatim.
 
+## 2026-08-04 — independent audit, correction, and traceability
+
+The user requested an independent senior full-stack, PostgreSQL, security, QA, UX, and documentation audit that did not trust the implementation-session claims. The request required reading the approved paper/ERD and the full repository, creating a requirement matrix, exercising all database and role rules (including concurrency and unauthorized direct calls), strengthening weak tests, fixing every confirmed issue, rerunning affected verification, reconciling documentation, separating local/static/hosted evidence, and returning a 17-part final report. The full prompt remains in the external attachment; approved files under `Doc/` were read-only.
