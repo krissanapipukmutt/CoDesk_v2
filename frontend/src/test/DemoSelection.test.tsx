@@ -11,7 +11,7 @@ describe('demo role selection', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input)
-      return new Response(JSON.stringify(url.endsWith('/api/me') ? { ...profile, roleId: undefined, timezoneName: undefined } : [profile]), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      return new Response(JSON.stringify(url.endsWith('/api/me') ? { ...profile, roleId: undefined } : [profile]), { status: 200, headers: { 'Content-Type': 'application/json' } })
     }))
   })
   it('loads seeded demo identities and stores the selected profile', async () => {
@@ -23,4 +23,3 @@ describe('demo role selection', () => {
     expect(await screen.findByText('หน้าหลัก')).toBeInTheDocument()
   })
 })
-

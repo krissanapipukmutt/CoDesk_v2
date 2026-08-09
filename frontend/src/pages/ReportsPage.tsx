@@ -7,6 +7,8 @@ import {
 } from "@tanstack/react-table";
 import { BarChart3, ChevronDown, ChevronUp } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import {
   Bar,
   BarChart,
@@ -21,6 +23,7 @@ import { EmptyState, ErrorState, LoadingState } from "../components/Feedback";
 import { Pagination } from "../components/Pagination";
 import { Card, PageHeader } from "../components/ui/Card";
 import type { Department, PageResult, ReportPage } from "../types";
+import { localizedError } from "../i18n/format";
 
 type Row = Record<string, unknown>;
 interface Definition {
@@ -28,83 +31,52 @@ interface Definition {
   title: string;
   columns: Array<{ key: string; label: string }>;
 }
-const reports: Definition[] = [
+const reportShape = [
   {
     code: "daily-department-bookings",
-    title: "ยอดจองรายวันแยกฝ่าย",
-    columns: [
-      { key: "business_date", label: "วันที่" },
-      { key: "department_code", label: "รหัสฝ่าย" },
-      { key: "department_name", label: "ฝ่าย" },
-      { key: "active_booking_total", label: "ยอดจอง" },
-    ],
+    titleKey: "daily",
+    columns: ["business_date", "department_code", "department_name", "active_booking_total"],
   },
   {
     code: "department-capacity-utilization",
-    title: "การใช้ความจุของฝ่าย",
-    columns: [
-      { key: "business_date", label: "วันที่" },
-      { key: "department_code", label: "รหัสฝ่าย" },
-      { key: "department_name", label: "ฝ่าย" },
-      { key: "capacity_mode", label: "รูปแบบ" },
-      { key: "capacity_per_day", label: "ความจุ" },
-      { key: "booked_count", label: "จองแล้ว" },
-      { key: "remaining_capacity", label: "คงเหลือ" },
-      { key: "utilization_percentage", label: "ใช้ (%)" },
-    ],
+    titleKey: "capacity",
+    columns: ["business_date", "department_code", "department_name", "capacity_mode", "capacity_per_day", "booked_count", "remaining_capacity", "utilization_percentage"],
   },
   {
     code: "employee-booking-frequency",
-    title: "ความถี่การจองของพนักงาน",
-    columns: [
-      { key: "employee_code", label: "รหัส" },
-      { key: "full_name", label: "พนักงาน" },
-      { key: "department_name", label: "ฝ่าย" },
-      { key: "total_bookings", label: "ทั้งหมด" },
-      { key: "active_bookings", label: "ใช้งาน" },
-      { key: "cancelled_bookings", label: "ยกเลิก" },
-      { key: "first_booking_date", label: "วันแรก" },
-      { key: "last_booking_date", label: "วันล่าสุด" },
-    ],
+    titleKey: "frequency",
+    columns: ["employee_code", "full_name", "department_name", "total_bookings", "active_bookings", "cancelled_bookings", "first_booking_date", "last_booking_date"],
   },
   {
     code: "holiday-bookings",
-    title: "การจองในวันหยุด",
-    columns: [
-      { key: "holiday_date", label: "วันหยุด" },
-      { key: "holiday_name", label: "ชื่อวันหยุด" },
-      { key: "employee_code", label: "รหัส" },
-      { key: "full_name", label: "พนักงาน" },
-      { key: "department_name", label: "ฝ่าย" },
-      { key: "booking_mode", label: "รูปแบบจอง" },
-      { key: "holiday_warning_acknowledged", label: "ยืนยันแล้ว" },
-      { key: "status_code", label: "สถานะ" },
-    ],
+    titleKey: "holiday",
+    columns: ["holiday_date", "holiday_name", "employee_code", "full_name", "department_name", "booking_mode", "holiday_warning_acknowledged", "status_code"],
   },
   {
     code: "booking-cancellations",
-    title: "สรุปการยกเลิก",
-    columns: [
-      { key: "cancellation_date", label: "วันที่ยกเลิก" },
-      { key: "employee_code", label: "รหัส" },
-      { key: "full_name", label: "พนักงาน" },
-      { key: "department_name", label: "ฝ่าย" },
-      { key: "cancelled_by_name", label: "ผู้ยกเลิก" },
-      { key: "action_reason", label: "เหตุผล" },
-      { key: "department_daily_cancellation_total", label: "ยอดยกเลิกรายวัน" },
-    ],
+    titleKey: "cancellations",
+    columns: ["cancellation_date", "employee_code", "full_name", "department_name", "cancelled_by_name", "action_reason", "department_daily_cancellation_total"],
   },
-];
+] as const;
+
+const buildReports = (t: TFunction): Definition[] => reportShape.map((report) => ({
+  code: report.code,
+  title: t(`reports.definitions.${report.titleKey}.title`),
+  columns: report.columns.map((key) => ({ key, label: t(`reports.columns.${key}`) })),
+}));
 
 export function ReportsPage() {
-  const [active, setActive] = useState(reports[0]);
+  const { t } = useTranslation();
+  const reports = useMemo(() => buildReports(t), [t]);
+  const [activeCode, setActiveCode] = useState<string>(reportShape[0].code);
+  const active = reports.find((report) => report.code === activeCode) ?? reports[0];
   const [filters, setFilters] = useState<Record<string, string>>({});
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [departmentId, setDepartmentId] = useState("");
   const [page, setPage] = useState(1);
   const [sort, setSort] = useState<{ key: string; direction: "asc" | "desc" }>({
-    key: reports[0].columns[0].key,
+    key: reportShape[0].columns[0],
     direction: "asc",
   });
   const departments = useQuery({
@@ -142,7 +114,7 @@ export function ReportsPage() {
       ),
   });
   const selectReport = (definition: Definition) => {
-    setActive(definition);
+    setActiveCode(definition.code);
     setFilters({});
     setPage(1);
     setSort({ key: definition.columns[0].key, direction: "asc" });
@@ -150,8 +122,8 @@ export function ReportsPage() {
   return (
     <>
       <PageHeader
-        title="รายงาน"
-        description="ข้อมูลจริงจาก PostgreSQL Views พร้อมตัวกรองรายคอลัมน์แบบตาราง Excel"
+        title={t("reports.title")}
+        description={t("reports.description")}
       />
       <div className="mb-4 flex gap-2 overflow-auto pb-1">
         {reports.map((report) => (
@@ -167,7 +139,7 @@ export function ReportsPage() {
       <Card>
         <div className="mb-4 grid gap-3 sm:grid-cols-3">
           <label>
-            <span className="field-label">ตั้งแต่วันที่</span>
+            <span className="field-label">{t("reports.from")}</span>
             <input
               type="date"
               className="field-input"
@@ -179,7 +151,7 @@ export function ReportsPage() {
             />
           </label>
           <label>
-            <span className="field-label">ถึงวันที่</span>
+            <span className="field-label">{t("reports.to")}</span>
             <input
               type="date"
               className="field-input"
@@ -191,7 +163,7 @@ export function ReportsPage() {
             />
           </label>
           <label>
-            <span className="field-label">ฝ่ายงาน</span>
+            <span className="field-label">{t("reports.department")}</span>
             <select
               className="field-input"
               value={departmentId}
@@ -200,7 +172,7 @@ export function ReportsPage() {
                 setPage(1);
               }}
             >
-              <option value="">ทุกฝ่าย</option>
+              <option value="">{t("common.allDepartments")}</option>
               {departments.data?.items.map((department) => (
                 <option
                   key={department.departmentId}
@@ -219,9 +191,9 @@ export function ReportsPage() {
         {query.isLoading ? (
           <LoadingState />
         ) : query.isError ? (
-          <ErrorState message={query.error.message} />
+          <ErrorState message={localizedError(t, query.error)} />
         ) : !query.data?.items.length ? (
-          <EmptyState message="ไม่พบข้อมูลรายงานตามเงื่อนไข" />
+          <EmptyState message={t("reports.empty")} />
         ) : (
           <>
             <ReportTable
@@ -271,6 +243,7 @@ function ReportTable({
   sort: { key: string; direction: "asc" | "desc" };
   onSort: (key: string) => void;
 }) {
+  const { t } = useTranslation();
   const columns = useMemo<ColumnDef<Row>[]>(
     () =>
       definition.columns.map((column) => ({
@@ -290,9 +263,9 @@ function ReportTable({
               ))}
           </button>
         ),
-        cell: (context) => formatValue(context.getValue()),
+        cell: (context) => formatValue(context.getValue(), column.key, t),
       })),
-    [definition, onSort, sort],
+    [definition, onSort, sort, t],
   );
   const table = useReactTable({
     data: rows,
@@ -312,13 +285,13 @@ function ReportTable({
                     header.getContext(),
                   )}
                   <input
-                    aria-label={`กรอง ${header.id}`}
+                    aria-label={t("reports.filterLabel", { column: header.id })}
                     className="mt-2 w-full min-w-24 rounded border border-[#d0d5dd] bg-white px-2 py-1 text-xs font-normal"
                     value={filters[header.id] ?? ""}
                     onChange={(event) =>
                       onFilter(header.id, event.target.value)
                     }
-                    placeholder="กรอง…"
+                    placeholder={t("reports.filterPlaceholder")}
                   />
                 </th>
               ))}
@@ -340,12 +313,16 @@ function ReportTable({
     </div>
   );
 }
-function formatValue(value: unknown) {
+function formatValue(value: unknown, key: string, t: TFunction) {
   if (value === null || value === undefined || value === "") return "—";
-  if (typeof value === "boolean") return value ? "ใช่" : "ไม่";
+  if (typeof value === "boolean") return value ? t("common.yes") : t("common.no");
+  if (key === "capacity_mode" && (value === "limited" || value === "unlimited")) return t(`status.${value}`);
+  if (key === "booking_mode" && (value === "single_day" || value === "date_time_range")) return t(`status.${value}`);
+  if (key === "status_code" && (value === "booked" || value === "cancelled")) return t(`status.${value}`);
   return String(value);
 }
 function ReportChart({ rows }: { rows: Row[] }) {
+  const { t } = useTranslation();
   const data = rows
     .slice(0, 12)
     .map((row) => ({
@@ -357,7 +334,7 @@ function ReportChart({ rows }: { rows: Row[] }) {
     <div className="mb-5 h-72 rounded-xl border border-[#e4e8f0] p-3">
       <div className="mb-2 flex items-center gap-2 font-semibold">
         <BarChart3 size={18} className="text-[#3157d5]" />
-        จองแล้วเทียบความจุ
+        {t("reports.chartTitle")}
       </div>
       <ResponsiveContainer width="100%" height="88%">
         <BarChart data={data}>
@@ -365,8 +342,8 @@ function ReportChart({ rows }: { rows: Row[] }) {
           <XAxis dataKey="name" hide />
           <YAxis />
           <Tooltip />
-          <Bar dataKey="capacity" fill="#c7d7fe" name="ความจุ" />
-          <Bar dataKey="booked" fill="#3157d5" name="จองแล้ว" />
+          <Bar dataKey="capacity" fill="#c7d7fe" name={t("reports.chartCapacity")} />
+          <Bar dataKey="booked" fill="#3157d5" name={t("reports.chartBooked")} />
         </BarChart>
       </ResponsiveContainer>
     </div>

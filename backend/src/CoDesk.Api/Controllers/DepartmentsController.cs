@@ -7,6 +7,10 @@ namespace CoDesk.Api.Controllers;
 [Route("api/departments")]
 public sealed class DepartmentsController(ICoDeskDataService dataService) : CoDeskControllerBase
 {
+    [HttpGet("timezones")]
+    public async Task<ActionResult<IReadOnlyList<string>>> Timezones(CancellationToken cancellationToken) =>
+        Ok(await dataService.GetSupportedTimezonesAsync(cancellationToken));
+
     [HttpGet]
     public async Task<ActionResult<PageResult<DepartmentDto>>> Get([FromQuery] ListQuery query, [FromQuery] bool includeInactive, CancellationToken cancellationToken)
     {
@@ -38,8 +42,7 @@ public sealed class DepartmentsController(ICoDeskDataService dataService) : CoDe
     [Authorize(Policy = "DepartmentManagement")]
     public async Task<ActionResult<DepartmentDto>> SetStatus(Guid departmentId, [FromBody] DepartmentStatusRequest request, CancellationToken cancellationToken)
     {
-        var existing = (await dataService.GetDepartmentsAsync(new ListQuery(PageSize: 100), true, cancellationToken)).Items
-            .FirstOrDefault(item => item.DepartmentId == departmentId);
+        var existing = await dataService.GetDepartmentAsync(departmentId, cancellationToken);
         if (existing is null) return NotFound();
         var update = new DepartmentUpsertRequest(existing.DepartmentCode, existing.DepartmentName, existing.CapacityMode,
             existing.DefaultCapacityPerDay, request.IsActive, existing.EffectiveTimezone);
@@ -48,4 +51,3 @@ public sealed class DepartmentsController(ICoDeskDataService dataService) : CoDe
 }
 
 public sealed record DepartmentStatusRequest(bool IsActive);
-

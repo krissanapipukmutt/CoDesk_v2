@@ -63,22 +63,17 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ck_bookings_dates' AND conrelid = 'co_desk.bookings'::regclass) THEN
         ALTER TABLE co_desk.bookings ADD CONSTRAINT ck_bookings_dates CHECK (booking_date_end >= booking_date_start AND end_at > start_at);
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ck_bookings_business_dates' AND conrelid = 'co_desk.bookings'::regclass) THEN
-        ALTER TABLE co_desk.bookings ADD CONSTRAINT ck_bookings_business_dates CHECK (
-            booking_date_start = (start_at AT TIME ZONE 'Asia/Bangkok')::date
-            AND booking_date_end = ((end_at - interval '1 microsecond') AT TIME ZONE 'Asia/Bangkok')::date
-        );
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ck_bookings_single_day_storage' AND conrelid = 'co_desk.bookings'::regclass) THEN
-        ALTER TABLE co_desk.bookings ADD CONSTRAINT ck_bookings_single_day_storage CHECK (
-            booking_mode <> 'single_day'
-            OR (
-                booking_date_start = booking_date_end
-                AND start_at = booking_date_start::timestamp AT TIME ZONE 'Asia/Bangkok'
-                AND end_at = (booking_date_start + 1)::timestamp AT TIME ZONE 'Asia/Bangkok'
-            )
-        );
-    END IF;
+    -- Exact timezone/date consistency is enforced by the booking trigger in script 03.
+    -- These row-only checks deliberately avoid looking up the department's current
+    -- timezone so a later department edit cannot invalidate historical bookings.
+    ALTER TABLE co_desk.bookings DROP CONSTRAINT IF EXISTS ck_bookings_business_dates;
+    ALTER TABLE co_desk.bookings ADD CONSTRAINT ck_bookings_business_dates CHECK (
+        booking_date_end >= booking_date_start
+    );
+    ALTER TABLE co_desk.bookings DROP CONSTRAINT IF EXISTS ck_bookings_single_day_storage;
+    ALTER TABLE co_desk.bookings ADD CONSTRAINT ck_bookings_single_day_storage CHECK (
+        booking_mode <> 'single_day' OR booking_date_start = booking_date_end
+    );
     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'ck_bookings_cancellation' AND conrelid = 'co_desk.bookings'::regclass) THEN
         ALTER TABLE co_desk.bookings ADD CONSTRAINT ck_bookings_cancellation CHECK (
             (status_code = 'booked' AND cancelled_at IS NULL AND cancelled_by_profile_id IS NULL)

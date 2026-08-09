@@ -2,9 +2,9 @@
 
 ## Current state
 
-CoDesk is a greenfield implementation created on 2026-08-03 from the approved five-page Chapter 1–3 paper and one-page ERD. It was independently audited and corrected on 2026-08-04. The repository contains authoritative PostgreSQL SQL, a .NET 10 API, a React/TypeScript frontend, Demo Mode, production Supabase Auth integration, automated tests, and project/evidence documentation.
+CoDesk is a greenfield implementation created on 2026-08-03 from the approved five-page Chapter 1–3 paper and one-page ERD. It was independently audited and corrected on 2026-08-04, then extended with complete multi-timezone behavior on 2026-08-09 without changing the approved seven-table/five-view model. The repository contains authoritative PostgreSQL SQL, a .NET 10 API, a React/TypeScript frontend, Demo Mode, production Supabase Auth integration, automated tests, and project/evidence documentation.
 
-Local verification is complete: SQL scripts and the expanded smoke suite passed on a fresh and populated PostgreSQL 14.21 database; an explicit two-session capacity race passed; the .NET solution built cleanly with 19 passing tests; the frontend typechecked/linted/built with 12 passing component tests; and 15 Playwright journeys passed against a real temporary database/API/UI stack. The 108-row traceability matrix records 94 Verified, 11 Partially verified, and 3 Blocked requirements. External Supabase execution and final screenshots remain because no tenant credentials were supplied.
+Current local functional verification is complete: authoritative SQL scripts `00`–`08` and the expanded timezone smoke suite passed twice on a disposable PostgreSQL 14.21 database; the .NET solution built cleanly with 25 passing tests; the frontend typechecked/linted/built with 39 passing component tests; and 17 Playwright journeys passed against the disposable database/API/UI stack. The final audit also reproduced and fixed department status lookup beyond the first 100 rows, malformed report filters returning 500 instead of 400, two language-specific booking audit reasons outside the centralized catalog, and silent normalization of a nonexistent New York spring-forward wall time. The later credential remediation separated the frontend Publishable key from the backend Secret key, disabled the legacy JWT-based API keys, and produced a frontend bundle containing no backend or legacy `service_role` credential. The 2026-08-04 hosted Supabase Auth/RBAC/database baseline remains recorded, but the 2026-08-09 multi-timezone/bilingual release was not deployed to or reverified against the hosted tenant. Final screenshots and the connected-browser manual visual pass remain manual.
 
 ## Non-negotiable requirements
 
@@ -12,7 +12,7 @@ Local verification is complete: SQL scripts and the expanded smoke suite passed 
 - Exactly seven application tables: roles, departments, profiles, holidays, bookings, booking_audit_logs, user_department_history.
 - No capacity-policy, employee, seat, workspace, office, room, or migration-history table.
 - SQL files create the database; do not add EF migrations.
-- Asia/Bangkok business dates; UTC-backed `timestamptz`; half-open booking intervals.
+- Department effective IANA timezone for booking business dates, Asia/Bangkok as the default, UTC-backed `timestamptz`, and half-open booking intervals.
 - Admin alone creates Auth users and changes roles. HR manages existing employee profiles only.
 - Demo headers authenticate only while the backend Demo Mode option is enabled.
 - React uses Supabase only for production authentication and calls ASP.NET for all application data.
@@ -25,7 +25,7 @@ Local verification is complete: SQL scripts and the expanded smoke suite passed 
 - `backend/src/CoDesk.Application`: DTOs, interfaces, and authorization rules.
 - `backend/src/CoDesk.Infrastructure`: EF mappings, Npgsql query/RPC service, Supabase Admin service.
 - `backend/src/CoDesk.Api`: auth schemes, claims enrichment, policies, middleware, controllers, Swagger.
-- `frontend/src`: API client, auth context, Thai pages, shadcn-style UI primitives, FullCalendar, reports.
+- `frontend/src`: API client, auth context, centralized Thai/English UI, reusable UI primitives, FullCalendar, and reports.
 
 Technologies: PostgreSQL/Supabase, .NET 10, Npgsql/EF Core, React 19, TypeScript strict, Vite/Tailwind, TanStack Query/Table, FullCalendar, Recharts, xUnit, Vitest/RTL, Playwright.
 
@@ -39,6 +39,7 @@ Technologies: PostgreSQL/Supabase, .NET 10, Npgsql/EF Core, React 19, TypeScript
 - Screenshot workflow: `docs/CHAPTER_4_EVIDENCE_GUIDE.md`
 - API startup: `backend/src/CoDesk.Api/Program.cs`
 - Booking database rules: `database/sql/04_create_booking_functions.sql`
+- Timezone validation/inheritance rules: `database/sql/03_create_common_functions_and_triggers.sql`
 - Frontend routes: `frontend/src/App.tsx`
 
 ## How to continue

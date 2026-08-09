@@ -3,11 +3,12 @@ SET search_path = co_desk, public;
 CREATE OR REPLACE FUNCTION co_desk.booking_touched_dates(
     p_start_at timestamptz,
     p_end_at timestamptz,
-    p_timezone text DEFAULT 'Asia/Bangkok'
+    p_timezone text DEFAULT NULL
 )
 RETURNS TABLE(business_date date)
 LANGUAGE sql
 STABLE
+STRICT
 SET search_path = co_desk, pg_temp
 AS $$
     SELECT generated::date
@@ -66,13 +67,16 @@ STABLE
 SET search_path = co_desk, pg_temp
 AS $$
     WITH department AS (
-        SELECT capacity_mode, default_capacity_per_day
+        SELECT capacity_mode, default_capacity_per_day, effective_timezone
         FROM co_desk.departments
         WHERE department_id = p_department_id AND is_active
     ), daily AS (
         SELECT d.business_date,
                COUNT(b.booking_id)::integer AS current_count
-        FROM co_desk.booking_touched_dates(p_start_at, p_end_at) d
+        FROM department
+        CROSS JOIN LATERAL co_desk.booking_touched_dates(
+            p_start_at, p_end_at, department.effective_timezone
+        ) d
         LEFT JOIN co_desk.bookings b
           ON b.department_id = p_department_id
          AND b.status_code = 'booked'
@@ -104,7 +108,10 @@ AS $$
     FROM result;
 $$;
 
+DROP FUNCTION IF EXISTS co_desk.check_booking_holidays(timestamptz, timestamptz);
+
 CREATE OR REPLACE FUNCTION co_desk.check_booking_holidays(
+    p_department_id uuid,
     p_start_at timestamptz,
     p_end_at timestamptz
 )
@@ -113,10 +120,17 @@ LANGUAGE sql
 STABLE
 SET search_path = co_desk, pg_temp
 AS $$
-    WITH matches AS (
+    WITH department AS (
+        SELECT effective_timezone
+        FROM co_desk.departments
+        WHERE department_id = p_department_id AND is_active
+    ), matches AS (
         SELECT h.holiday_id, h.holiday_date, h.holiday_name, h.holiday_description
         FROM co_desk.holidays h
-        JOIN co_desk.booking_touched_dates(p_start_at, p_end_at) d
+        JOIN department ON true
+        JOIN LATERAL co_desk.booking_touched_dates(
+            p_start_at, p_end_at, department.effective_timezone
+        ) d
           ON d.business_date = h.holiday_date
         WHERE h.is_active
         ORDER BY h.holiday_date
@@ -187,6 +201,7 @@ AS $$
 DECLARE
     v_actor_role text;
     v_department_id uuid;
+    v_timezone text;
     v_start_at timestamptz;
     v_end_at timestamptz;
     v_date_start date;
@@ -198,7 +213,7 @@ DECLARE
 BEGIN
     v_actor_role := co_desk.assert_booking_actor(p_booked_by_profile_id, p_booked_for_profile_id);
 
-    SELECT p.department_id INTO v_department_id
+    SELECT p.department_id, d.effective_timezone INTO v_department_id, v_timezone
     FROM co_desk.profiles p
     JOIN co_desk.departments d ON d.department_id = p.department_id AND d.is_active
     WHERE p.profile_id = p_booked_for_profile_id AND p.is_active
@@ -213,23 +228,23 @@ BEGIN
         END IF;
         v_date_start := p_booking_date_start;
         v_date_end := p_booking_date_start;
-        v_start_at := p_booking_date_start::timestamp AT TIME ZONE 'Asia/Bangkok';
-        v_end_at := (p_booking_date_start + 1)::timestamp AT TIME ZONE 'Asia/Bangkok';
+        v_start_at := p_booking_date_start::timestamp AT TIME ZONE v_timezone;
+        v_end_at := (p_booking_date_start + 1)::timestamp AT TIME ZONE v_timezone;
     ELSIF p_booking_mode = 'date_time_range' THEN
         IF p_start_at IS NULL OR p_end_at IS NULL OR p_end_at <= p_start_at THEN
             RETURN jsonb_build_object('success', false, 'code', 'validation_error', 'message', 'A valid startAt/endAt range is required');
         END IF;
         v_start_at := p_start_at;
         v_end_at := p_end_at;
-        v_date_start := (v_start_at AT TIME ZONE 'Asia/Bangkok')::date;
-        v_date_end := ((v_end_at - interval '1 microsecond') AT TIME ZONE 'Asia/Bangkok')::date;
+        v_date_start := (v_start_at AT TIME ZONE v_timezone)::date;
+        v_date_end := ((v_end_at - interval '1 microsecond') AT TIME ZONE v_timezone)::date;
     ELSE
         RETURN jsonb_build_object('success', false, 'code', 'validation_error', 'message', 'Unsupported booking mode');
     END IF;
 
     PERFORM 1 FROM co_desk.departments WHERE department_id = v_department_id FOR UPDATE;
 
-    v_holidays := co_desk.check_booking_holidays(v_start_at, v_end_at);
+    v_holidays := co_desk.check_booking_holidays(v_department_id, v_start_at, v_end_at);
     IF COALESCE((v_holidays ->> 'hasHolidays')::boolean, false) AND NOT p_holiday_warning_acknowledged THEN
         RETURN jsonb_build_object('success', false, 'code', 'holiday_confirmation_required', 'message', 'Holiday confirmation is required', 'details', v_holidays);
     END IF;
@@ -259,7 +274,8 @@ BEGIN
         old_values_json, new_values_json, request_id, ip_address, user_agent
     ) VALUES (
         v_booking.booking_id, 'create', p_booked_by_profile_id, v_actor_role, 'Booking created',
-        NULL, to_jsonb(v_booking), p_request_id, p_ip_address, left(p_user_agent, 1000)
+        NULL, to_jsonb(v_booking) || jsonb_build_object('business_timezone', v_timezone),
+        p_request_id, p_ip_address, left(p_user_agent, 1000)
     );
 
     RETURN jsonb_build_object('success', true, 'code', 'created', 'booking', to_jsonb(v_booking), 'holidays', v_holidays);
@@ -294,6 +310,7 @@ DECLARE
     v_new co_desk.bookings;
     v_actor_role text;
     v_department_id uuid;
+    v_timezone text;
     v_start_at timestamptz;
     v_end_at timestamptz;
     v_date_start date;
@@ -313,8 +330,10 @@ BEGIN
         RAISE EXCEPTION 'Only an admin can edit another profile booking' USING ERRCODE = '42501';
     END IF;
 
-    SELECT department_id INTO v_department_id FROM co_desk.profiles
-    WHERE profile_id = p_booked_for_profile_id AND is_active;
+    SELECT p.department_id, d.effective_timezone INTO v_department_id, v_timezone
+    FROM co_desk.profiles p
+    JOIN co_desk.departments d ON d.department_id = p.department_id
+    WHERE p.profile_id = p_booked_for_profile_id AND p.is_active;
     IF v_department_id IS NULL THEN
         RETURN jsonb_build_object('success', false, 'code', 'invalid_profile', 'message', 'Target profile is inactive');
     END IF;
@@ -322,13 +341,13 @@ BEGIN
     IF p_booking_mode = 'single_day' AND p_booking_date_start IS NOT NULL THEN
         v_date_start := p_booking_date_start;
         v_date_end := p_booking_date_start;
-        v_start_at := p_booking_date_start::timestamp AT TIME ZONE 'Asia/Bangkok';
-        v_end_at := (p_booking_date_start + 1)::timestamp AT TIME ZONE 'Asia/Bangkok';
+        v_start_at := p_booking_date_start::timestamp AT TIME ZONE v_timezone;
+        v_end_at := (p_booking_date_start + 1)::timestamp AT TIME ZONE v_timezone;
     ELSIF p_booking_mode = 'date_time_range' AND p_start_at IS NOT NULL AND p_end_at > p_start_at THEN
         v_start_at := p_start_at;
         v_end_at := p_end_at;
-        v_date_start := (v_start_at AT TIME ZONE 'Asia/Bangkok')::date;
-        v_date_end := ((v_end_at - interval '1 microsecond') AT TIME ZONE 'Asia/Bangkok')::date;
+        v_date_start := (v_start_at AT TIME ZONE v_timezone)::date;
+        v_date_end := ((v_end_at - interval '1 microsecond') AT TIME ZONE v_timezone)::date;
     ELSE
         RETURN jsonb_build_object('success', false, 'code', 'validation_error', 'message', 'Invalid booking date or range');
     END IF;
@@ -338,7 +357,7 @@ BEGIN
         RETURN jsonb_build_object('success', false, 'code', 'invalid_department', 'message', 'Department is inactive');
     END IF;
 
-    v_check := co_desk.check_booking_holidays(v_start_at, v_end_at);
+    v_check := co_desk.check_booking_holidays(v_department_id, v_start_at, v_end_at);
     IF COALESCE((v_check ->> 'hasHolidays')::boolean, false) AND NOT p_holiday_warning_acknowledged THEN
         RETURN jsonb_build_object('success', false, 'code', 'holiday_confirmation_required', 'message', 'Holiday confirmation is required', 'details', v_check);
     END IF;
@@ -369,7 +388,8 @@ BEGIN
         old_values_json, new_values_json, request_id, ip_address, user_agent
     ) VALUES (
         p_booking_id, 'update', p_actor_profile_id, v_actor_role, COALESCE(NULLIF(btrim(p_action_reason), ''), 'Booking updated'),
-        to_jsonb(v_old), to_jsonb(v_new), p_request_id, p_ip_address, left(p_user_agent, 1000)
+        to_jsonb(v_old), to_jsonb(v_new) || jsonb_build_object('business_timezone', v_timezone),
+        p_request_id, p_ip_address, left(p_user_agent, 1000)
     );
 
     RETURN jsonb_build_object('success', true, 'code', 'updated', 'booking', to_jsonb(v_new));
@@ -396,6 +416,7 @@ DECLARE
     v_old co_desk.bookings;
     v_new co_desk.bookings;
     v_actor_role text;
+    v_timezone text;
 BEGIN
     SELECT * INTO v_old FROM co_desk.bookings WHERE booking_id = p_booking_id FOR UPDATE;
     IF NOT FOUND THEN
@@ -410,6 +431,10 @@ BEGIN
         RETURN jsonb_build_object('success', true, 'code', 'already_cancelled', 'booking', to_jsonb(v_old));
     END IF;
 
+    SELECT effective_timezone INTO v_timezone
+    FROM co_desk.departments
+    WHERE department_id = v_old.department_id;
+
     UPDATE co_desk.bookings SET
         status_code = 'cancelled',
         cancelled_at = now(),
@@ -422,7 +447,10 @@ BEGIN
         old_values_json, new_values_json, request_id, ip_address, user_agent
     ) VALUES (
         p_booking_id, 'cancel', p_actor_profile_id, v_actor_role, COALESCE(NULLIF(btrim(p_action_reason), ''), 'Booking cancelled'),
-        to_jsonb(v_old), to_jsonb(v_new), p_request_id, p_ip_address, left(p_user_agent, 1000)
+        to_jsonb(v_old), to_jsonb(v_new) || jsonb_build_object(
+            'business_timezone', v_timezone,
+            'cancellation_business_date', (v_new.cancelled_at AT TIME ZONE v_timezone)::date
+        ), p_request_id, p_ip_address, left(p_user_agent, 1000)
     );
 
     RETURN jsonb_build_object('success', true, 'code', 'cancelled', 'booking', to_jsonb(v_new));
@@ -432,7 +460,7 @@ $$;
 REVOKE ALL ON FUNCTION co_desk.booking_touched_dates(timestamptz, timestamptz, text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION co_desk.check_booking_conflict(uuid, timestamptz, timestamptz, uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION co_desk.check_department_capacity(uuid, timestamptz, timestamptz, uuid) FROM PUBLIC;
-REVOKE ALL ON FUNCTION co_desk.check_booking_holidays(timestamptz, timestamptz) FROM PUBLIC;
+REVOKE ALL ON FUNCTION co_desk.check_booking_holidays(uuid, timestamptz, timestamptz) FROM PUBLIC;
 REVOKE ALL ON FUNCTION co_desk.assert_booking_actor(uuid, uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION co_desk.create_booking(uuid, uuid, text, date, timestamptz, timestamptz, boolean, text, text, inet, text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION co_desk.update_booking(uuid, uuid, uuid, text, date, timestamptz, timestamptz, boolean, text, text, text, inet, text) FROM PUBLIC;

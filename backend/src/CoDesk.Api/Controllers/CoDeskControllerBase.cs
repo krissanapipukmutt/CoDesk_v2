@@ -48,8 +48,7 @@ public abstract class CoDeskControllerBase : ControllerBase
             throw new ArgumentException("Unlimited departments must not specify daily capacity.");
         if (request.CapacityMode is not ("limited" or "unlimited"))
             throw new ArgumentException("Capacity mode must be limited or unlimited.");
-        if (request.EffectiveTimezone != "Asia/Bangkok")
-            throw new ArgumentException("CoDesk currently requires Asia/Bangkok as the effective timezone.");
+        TimezoneRules.GetRequiredTimeZone(request.EffectiveTimezone);
     }
 
     protected static void ValidateBooking(BookingWriteRequest request)
@@ -64,4 +63,3 @@ public abstract class CoDeskControllerBase : ControllerBase
         if (request.NoteText?.Length > 2000) throw new ArgumentException("Notes cannot exceed 2,000 characters.");
     }
 }
-

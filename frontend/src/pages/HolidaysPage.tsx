@@ -1,12 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Search } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { apiFetch, toQuery } from "../api/client";
 import { EmptyState, ErrorState, LoadingState } from "../components/Feedback";
 import { Button } from "../components/ui/Button";
 import { Card, PageHeader } from "../components/ui/Card";
 import { Dialog } from "../components/ui/Dialog";
 import type { Holiday, PageResult } from "../types";
+import { localizedError } from "../i18n/format";
 
 interface Draft {
   holidayDate: string;
@@ -21,6 +23,7 @@ const blank: Draft = {
   isActive: true,
 };
 export function HolidaysPage() {
+  const { t } = useTranslation();
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("holidayDate");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
@@ -49,7 +52,7 @@ export function HolidaysPage() {
         { method: editing ? "PUT" : "POST", body: JSON.stringify(draft) },
       ),
     onSuccess: async () => {
-      setSuccess(editing ? "แก้ไขวันหยุดสำเร็จ" : "เพิ่มวันหยุดสำเร็จ");
+      setSuccess(editing ? "holidays.updated" : "holidays.added");
       setEditing(undefined);
       await client.invalidateQueries({ queryKey: ["holidays"] });
     },
@@ -70,51 +73,51 @@ export function HolidaysPage() {
   return (
     <>
       <PageHeader
-        title="จัดการวันหยุด"
-        description="รายการจองในวันหยุดยังทำได้หลังผู้ใช้ยืนยันคำเตือน"
+        title={t("holidays.title")}
+        description={t("holidays.description")}
         action={
           <Button onClick={() => open()}>
             <Plus size={17} />
-            เพิ่มวันหยุด
+            {t("holidays.add")}
           </Button>
         }
       />
       <Card>
         {success && (
-          <div className="mb-4 rounded-xl bg-[#ecfdf3] p-3 text-sm text-[#067647]">{success}</div>
+          <div className="mb-4 rounded-xl bg-[#ecfdf3] p-3 text-sm text-[#067647]">{t(success)}</div>
         )}
         <div className="mb-4 flex flex-wrap gap-2">
           <div className="relative max-w-md flex-1">
             <Search className="absolute left-3 top-3 text-[#98a2b3]" size={17} />
             <input
-              aria-label="ค้นหาวันหยุด"
+              aria-label={t("holidays.searchLabel")}
               className="field-input pl-9"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="ชื่อหรือรายละเอียด"
+              placeholder={t("holidays.searchPlaceholder")}
             />
           </div>
           <select
-            aria-label="เรียงวันหยุดตาม"
+            aria-label={t("holidays.sortLabel")}
             className="field-input w-auto"
             value={sortBy}
             onChange={(event) => setSortBy(event.target.value)}
           >
-            <option value="holidayDate">วันที่</option>
-            <option value="holidayName">ชื่อวันหยุด</option>
-            <option value="isActive">สถานะ</option>
+            <option value="holidayDate">{t("holidays.date")}</option>
+            <option value="holidayName">{t("holidays.name")}</option>
+            <option value="isActive">{t("holidays.status")}</option>
           </select>
           <Button
             variant="secondary"
             onClick={() => setSortDirection((value) => (value === "asc" ? "desc" : "asc"))}
           >
-            {sortDirection === "asc" ? "น้อย → มาก" : "มาก → น้อย"}
+            {sortDirection === "asc" ? t("common.ascending") : t("common.descending")}
           </Button>
         </div>
         {query.isLoading ? (
           <LoadingState />
         ) : query.isError ? (
-          <ErrorState message={query.error.message} />
+          <ErrorState message={localizedError(t, query.error)} />
         ) : !query.data?.items.length ? (
           <EmptyState />
         ) : (
@@ -122,10 +125,10 @@ export function HolidaysPage() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>วันที่</th>
-                  <th>ชื่อวันหยุด</th>
-                  <th>รายละเอียด</th>
-                  <th>สถานะ</th>
+                  <th>{t("holidays.date")}</th>
+                  <th>{t("holidays.name")}</th>
+                  <th>{t("holidays.descriptionField")}</th>
+                  <th>{t("holidays.status")}</th>
                   <th />
                 </tr>
               </thead>
@@ -139,7 +142,7 @@ export function HolidaysPage() {
                       <span
                         className={`status-pill ${holiday.isActive ? "status-active" : "status-inactive"}`}
                       >
-                        {holiday.isActive ? "ใช้งาน" : "ปิดใช้งาน"}
+                        {holiday.isActive ? t("common.active") : t("common.inactive")}
                       </span>
                     </td>
                     <td>
@@ -148,7 +151,7 @@ export function HolidaysPage() {
                         variant="secondary"
                         onClick={() => open(holiday)}
                       >
-                        แก้ไข
+                        {t("common.edit")}
                       </Button>
                     </td>
                   </tr>
@@ -163,11 +166,11 @@ export function HolidaysPage() {
         onOpenChange={(value) => {
           if (!value) setEditing(undefined);
         }}
-        title={editing ? "แก้ไขวันหยุด" : "เพิ่มวันหยุด"}
+        title={editing ? t("holidays.edit") : t("holidays.add")}
         footer={
           <>
             <Button variant="secondary" onClick={() => setEditing(undefined)}>
-              ยกเลิก
+              {t("common.cancel")}
             </Button>
             <Button
               disabled={
@@ -175,14 +178,14 @@ export function HolidaysPage() {
               }
               onClick={() => save.mutate()}
             >
-              บันทึก
+              {t("common.save")}
             </Button>
           </>
         }
       >
         <div className="space-y-4">
           <label>
-            <span className="field-label">วันที่</span>
+            <span className="field-label">{t("holidays.date")}</span>
             <input
               type="date"
               className="field-input"
@@ -193,7 +196,7 @@ export function HolidaysPage() {
             />
           </label>
           <label>
-            <span className="field-label">ชื่อวันหยุด</span>
+            <span className="field-label">{t("holidays.name")}</span>
             <input
               className="field-input"
               value={draft.holidayName}
@@ -203,7 +206,7 @@ export function HolidaysPage() {
             />
           </label>
           <label>
-            <span className="field-label">รายละเอียด</span>
+            <span className="field-label">{t("holidays.descriptionField")}</span>
             <textarea
               className="field-input"
               value={draft.holidayDescription}
@@ -220,11 +223,11 @@ export function HolidaysPage() {
                 setDraft({ ...draft, isActive: event.target.checked })
               }
             />
-            เปิดใช้งาน
+            {t("holidays.enable")}
           </label>
           {save.isError && (
             <p role="alert" className="text-sm text-[#b42318]">
-              {save.error.message}
+              {localizedError(t, save.error)}
             </p>
           )}
         </div>

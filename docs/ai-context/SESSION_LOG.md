@@ -140,3 +140,77 @@ Timezone: Asia/Bangkok.
 - `npm install && npm run typecheck && npm run lint && npm run test && npm run build`: all completed; 12 frontend tests passed; npm retained the two already documented moderate React Router findings.
 - Safe production browser probes were executed with Playwright against the real UI/API/Auth/database. The checked-in `demo-mode.spec.ts` suite was not run against Production Mode because it requires the deliberately disabled Demo header.
 - No application source defect was reproduced, so no source code or SQL was changed. Documentation was updated only with verified results.
+
+# Complete Multi-Timezone Support — 2026-08-09
+
+Timezone: Asia/Bangkok session clock; application business dates are now department-timezone aware.
+
+## Implementation
+
+- Preserved the approved seven tables, their columns, five reports, RBAC model, Auth architecture, and every file under `Doc/`; no EF migration, hosted mutation, secret operation, commit, or push was performed.
+- Added one PostgreSQL-backed IANA catalog endpoint and a searchable department timezone control. Unsupported timezone names are rejected by the UI, API, and database; new departments still default to `Asia/Bangkok`.
+- Added profile timezone inheritance on insert and synchronization on department transfer. A department timezone edit intentionally does not bulk-update existing profiles.
+- Reworked booking normalization, business-date validation, touched-date capacity, and global-holiday checks to use the target department's effective timezone. Single-day intervals are exact local-midnight half-open ranges, including DST-length days.
+- Preserved booking dates as historical facts. Create/update audit JSON stores `business_timezone`; cancel audit JSON stores its timezone and cancellation-local date. Reports expand persisted business dates, so later department edits cannot shift old results.
+- Made booking list/detail rendering use the historical booking timezone and timed calendar rendering use the signed-in profile timezone without browser-timezone reinterpretation. All-day calendar entries keep stored dates.
+- Displayed profile timezone in employee/admin lists and department timezone context in booking/employee forms.
+- Fixed a stale employee-history cache discovered by Playwright by invalidating the affected history query after a profile save.
+
+## Verification
+
+- Executed authoritative SQL scripts `00`–`08` on a fresh disposable PostgreSQL 14.21 cluster and again after population. The expanded rollback-only smoke suite passed both runs, including Asia/Tokyo normalization, invalid IANA rejection, profile transfer, capacity, global holiday boundaries, historical stability after a department edit, and unchanged report dates.
+- `dotnet build`: 0 warnings, 0 errors. `dotnet test`: 11 unit + 12 integration = 23 passed.
+- Frontend typecheck, lint, and production build passed. Vitest: 17 passed across 4 files, including America/New_York winter/summer DST conversion.
+- Playwright: the first run exposed the stale history cache (14 passed, 1 failed); after the application fix, the focused regression passed and the complete real-stack suite passed 15/15. The department journey rejected `Mars/Olympus`, created `Asia/Tokyo`, then edited to `America/New_York`.
+- Final isolated catalog checks returned exactly 7 base tables, 5 views, and 0 forbidden/migration tables. The timezone endpoint included `America/New_York`.
+- Stopped the disposable API, Vite server, and PostgreSQL cluster after verification. Existing user development servers were not touched.
+
+## External status
+
+- The multi-timezone release was not deployed to the hosted Supabase project. The hosted results recorded on 2026-08-04 remain a baseline for Auth/RBAC/database compatibility, not proof of the new timezone behavior.
+- An explicitly authorized hosted deployment/regression pass and final Chapter 4 screenshots remain external follow-up work.
+
+# Complete Thai/English UI Support — 2026-08-09
+
+Timezone: Asia/Bangkok. This was a frontend-only implementation layered on the verified multi-timezone work.
+
+## Implementation
+
+- Added `i18next` and `react-i18next`, centralized Thai/English resources, Thai first-visit default without browser detection, `codesk.language` persistence, immediate `<html lang>`/title updates, and an accessible Thai/EN header switcher on auth, desktop, tablet, and mobile layouts.
+- Translated auth, navigation, dashboard, booking, calendar, departments, employees/history, holidays, users/roles, reports, shared feedback/pagination, validation, known API errors, dialogs, success messages, role/status/enum labels, accessible labels, and FullCalendar controls.
+- Kept employee/department/holiday/note/audit data and IANA identifiers verbatim. Language switching does not call the API, change RBAC codes, alter timezone selection/conversion, or write to the database.
+- No backend, SQL, schema, hosted environment, Auth configuration, or `Doc/` file was changed.
+
+## Verification
+
+- `npm install`, strict typecheck, lint, 36/36 Vitest tests across 6 files, and production build passed.
+- `npm audit --omit=dev` reported three moderate React Router dependency-chain findings for the documented redirect advisory; npm offers only the breaking v7 upgrade, so no forced fix was applied.
+- Created a disposable PostgreSQL cluster on an isolated port, ran authoritative SQL `00`–`08`, and ran a separate API/UI pair. The full Playwright suite passed 17/17, including language persistence/no-write/mobile checks and every existing live booking/management/report/RBAC/timezone journey.
+- The pre-existing server on port 5080 returned database-side 500 errors because its running database did not match the latest timezone SQL; it was not reset or modified. The isolated authoritative stack passed all workflows.
+- A connected browser-control instance was unavailable, so a separate manual visual overflow pass could not be completed. Automated desktop and 390×844 responsive interactions passed; manual visual review remains recorded in `OPEN_TASKS.md`.
+
+# Final Full-System Independent Audit — 2026-08-09
+
+Timezone: Asia/Bangkok. This audit independently reread repository guidance and technical documentation, inspected the complete current backend/frontend/SQL/test/configuration source, and did not rely on prior pass claims without current evidence.
+
+## Confirmed defects and minimal fixes
+
+- Reproduced a valid admin `PATCH /api/departments/{id}/status` request returning 404 when its department sorted beyond the first 100 rows. The controller was using a paginated list as an ID lookup. Added a parameterized `GetDepartmentAsync` service read, changed only that endpoint to use it, and added an in-process API regression test. The same disposable 101st-row request then returned 200 and changed the intended record.
+- Found two application-owned booking edit/cancel audit reasons hardcoded in Thai outside the centralized catalog. Added Thai/English resource entries and emitted the active-language phrase for new mutations. Existing database content, audit rows, schema, business rules, and error semantics were not translated or changed.
+- Reproduced malformed report `filters` JSON returning HTTP 500. Added a narrow `JsonException` validation mapping and an in-process API regression; the same live request then returned HTTP 400 without changing valid report behavior.
+- Reproduced `2026-03-08 02:30` in `America/New_York` silently round-tripping as `03:30`. Added local-time round-trip validation, localized Thai/English feedback, and utility/form regressions so nonexistent DST wall times are rejected before any API write.
+
+## Current verification
+
+- Git safety: branch `main`, HEAD `acf9c7f`; no staged changes; pre-existing timezone/bilingual worktree changes were preserved. `Doc/` had no diff.
+- SQL: scripts `00`–`08` passed with `ON_ERROR_STOP` on a disposable PostgreSQL 14.21 database and passed again after population; script `99` was not run.
+- Catalog: exactly 7 base tables, 5 report views, RLS enabled on all 7 tables, 16 policies, 19 `timestamptz` columns, 0 plain timestamp columns, and 0 critical booking functions executable by `PUBLIC`. The disposable `authenticated` role had no booking insert grant and no reporting-view grant.
+- Concurrency: simultaneous capacity-1 calls returned exactly one `created` and one `capacity_exceeded`.
+- Backend: restore/build passed with 0 warnings and 0 errors; 11 unit + 14 in-process API tests = 25/25 passed. NuGet reported no vulnerable direct or transitive package.
+- Frontend: install, strict typecheck, lint, 39/39 Vitest tests across 6 files, and production build passed.
+- Browser/API: the complete real-stack Playwright suite passed 17/17 after the fixes.
+- npm: `npm audit --omit=dev` reported 3 moderate vulnerable React Router-chain packages covering 4 advisories; the available fix is the planned breaking React Router 7 migration, so no forced upgrade was applied.
+- Security scan found no tracked credentials, private keys, application EF migration, or Edge Function. Local `.env` files remained ignored and only placeholder examples were tracked.
+- Critical local configuration finding: the ignored frontend public-key value equalled the ignored backend service-role value, and an exact-value scan found it once in the generated frontend bundle. No value was printed, committed, changed, rotated, or revoked. Production serving/deployment is blocked pending a correct public frontend key, a clean rebuild/scan, and explicitly authorized service-role rotation if the affected bundle/config was ever exposed.
+- The connected in-app visual browser was unavailable (`agent.browsers.list()` returned no browser), so the separate 1440×900 and 390×844 Thai/English manual visual inspection remains explicitly unverified. Automated desktop and mobile flows passed.
+- No hosted Supabase data/configuration was read or mutated, no key was rotated, and no commit or push was performed.

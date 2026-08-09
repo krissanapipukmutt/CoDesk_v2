@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Search } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { apiFetch, toQuery } from "../api/client";
 import { useAuth } from "../auth/useAuth";
 import { EmptyState, ErrorState, LoadingState } from "../components/Feedback";
@@ -15,6 +16,7 @@ import type {
   Profile,
   Role,
 } from "../types";
+import { localizedError, roleLabel } from "../i18n/format";
 
 interface Draft {
   employeeCode: string;
@@ -25,6 +27,7 @@ interface Draft {
   isActive: boolean;
 }
 export function EmployeesPage() {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const client = useQueryClient();
   const [search, setSearch] = useState("");
@@ -79,10 +82,16 @@ export function EmployeesPage() {
         }),
       }),
     onSuccess: async () => {
-      setSuccess("แก้ไขข้อมูลพนักงานสำเร็จ");
+      const updatedProfileId = editing?.profileId;
+      setSuccess("employees.updated");
       setEditing(null);
       setDraft(null);
-      await client.invalidateQueries({ queryKey: ["profiles-manage"] });
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ["profiles-manage"] }),
+        client.invalidateQueries({
+          queryKey: ["department-history", updatedProfileId],
+        }),
+      ]);
     },
   });
   if (!user) return null;
@@ -100,33 +109,33 @@ export function EmployeesPage() {
   return (
     <>
       <PageHeader
-        title="จัดการพนักงาน"
+        title={t("employees.title")}
         description={
           user.roleCode === "hr"
-            ? "HR แก้ไขได้เฉพาะข้อมูลพนักงานเดิม และไม่สามารถเปลี่ยนบทบาท"
-            : "แก้ไขข้อมูล ฝ่าย บทบาท และสถานะผู้ใช้"
+            ? t("employees.hrDescription")
+            : t("employees.adminDescription")
         }
       />
       <Card>
         {success && (
-          <div className="mb-4 rounded-xl bg-[#ecfdf3] p-3 text-sm text-[#067647]">{success}</div>
+          <div className="mb-4 rounded-xl bg-[#ecfdf3] p-3 text-sm text-[#067647]">{t(success)}</div>
         )}
         <div className="mb-4 flex flex-wrap gap-2">
           <div className="relative max-w-md flex-1">
             <Search className="absolute left-3 top-3 text-[#98a2b3]" size={17} />
             <input
-              aria-label="ค้นหาพนักงาน"
+              aria-label={t("employees.searchLabel")}
               className="field-input pl-9"
               value={search}
               onChange={(event) => {
                 setSearch(event.target.value);
                 setPage(1);
               }}
-              placeholder="รหัส ชื่อ หรืออีเมล"
+              placeholder={t("employees.searchPlaceholder")}
             />
           </div>
           <select
-            aria-label="เรียงพนักงานตาม"
+            aria-label={t("employees.sortLabel")}
             className="field-input w-auto"
             value={sortBy}
             onChange={(event) => {
@@ -134,23 +143,23 @@ export function EmployeesPage() {
               setPage(1);
             }}
           >
-            <option value="fullName">ชื่อ</option>
-            <option value="email">อีเมล</option>
-            <option value="departmentName">ฝ่าย</option>
-            <option value="roleCode">บทบาท</option>
-            <option value="isActive">สถานะ</option>
+            <option value="fullName">{t("employees.name")}</option>
+            <option value="email">{t("employees.email")}</option>
+            <option value="departmentName">{t("employees.department")}</option>
+            <option value="roleCode">{t("employees.role")}</option>
+            <option value="isActive">{t("employees.status")}</option>
           </select>
           <Button
             variant="secondary"
             onClick={() => setSortDirection((value) => (value === "asc" ? "desc" : "asc"))}
           >
-            {sortDirection === "asc" ? "น้อย → มาก" : "มาก → น้อย"}
+            {sortDirection === "asc" ? t("common.ascending") : t("common.descending")}
           </Button>
         </div>
         {profiles.isLoading ? (
           <LoadingState />
         ) : profiles.isError ? (
-          <ErrorState message={profiles.error.message} />
+          <ErrorState message={localizedError(t, profiles.error)} />
         ) : !profiles.data?.items.length ? (
           <EmptyState />
         ) : (
@@ -159,12 +168,13 @@ export function EmployeesPage() {
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>รหัส</th>
-                    <th>ชื่อ</th>
-                    <th>อีเมล</th>
-                    <th>ฝ่าย</th>
-                    <th>บทบาท</th>
-                    <th>สถานะ</th>
+                    <th>{t("employees.code")}</th>
+                    <th>{t("employees.name")}</th>
+                    <th>{t("employees.email")}</th>
+                    <th>{t("employees.department")}</th>
+                    <th>{t("employees.profileTimezone")}</th>
+                    <th>{t("employees.role")}</th>
+                    <th>{t("employees.status")}</th>
                     <th />
                   </tr>
                 </thead>
@@ -175,12 +185,13 @@ export function EmployeesPage() {
                       <td>{profile.fullName}</td>
                       <td>{profile.email}</td>
                       <td>{profile.departmentCode}</td>
-                      <td>{profile.roleName}</td>
+                      <td>{profile.timezoneName}</td>
+                      <td>{roleLabel(t, profile.roleCode)}</td>
                       <td>
                         <span
                           className={`status-pill ${profile.isActive ? "status-active" : "status-inactive"}`}
                         >
-                          {profile.isActive ? "ใช้งาน" : "ปิดใช้งาน"}
+                          {profile.isActive ? t("common.active") : t("common.inactive")}
                         </span>
                       </td>
                       <td>
@@ -191,7 +202,7 @@ export function EmployeesPage() {
                             variant="secondary"
                             onClick={() => open(profile)}
                           >
-                            แก้ไข
+                            {t("common.edit")}
                           </Button>
                         )}
                       </td>
@@ -217,7 +228,7 @@ export function EmployeesPage() {
             setDraft(null);
           }
         }}
-        title="แก้ไขข้อมูลพนักงาน"
+        title={t("employees.editTitle")}
         footer={
           <>
             <Button
@@ -227,7 +238,7 @@ export function EmployeesPage() {
                 setDraft(null);
               }}
             >
-              ยกเลิก
+              {t("common.cancel")}
             </Button>
             <Button
               disabled={
@@ -238,7 +249,7 @@ export function EmployeesPage() {
               }
               onClick={() => save.mutate()}
             >
-              บันทึก
+              {t("common.save")}
             </Button>
           </>
         }
@@ -247,7 +258,7 @@ export function EmployeesPage() {
           <div className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2">
               <label>
-                <span className="field-label">รหัสพนักงาน</span>
+                <span className="field-label">{t("employees.employeeCode")}</span>
                 <input
                   className="field-input"
                   value={draft.employeeCode}
@@ -257,7 +268,7 @@ export function EmployeesPage() {
                 />
               </label>
               <label>
-                <span className="field-label">ชื่อ-นามสกุล</span>
+                <span className="field-label">{t("employees.fullName")}</span>
                 <input
                   className="field-input"
                   value={draft.fullName}
@@ -268,7 +279,7 @@ export function EmployeesPage() {
               </label>
             </div>
             <label>
-              <span className="field-label">อีเมล</span>
+              <span className="field-label">{t("employees.email")}</span>
               <input
                 type="email"
                 className="field-input"
@@ -279,7 +290,7 @@ export function EmployeesPage() {
               />
             </label>
             <label>
-              <span className="field-label">ฝ่ายงาน</span>
+              <span className="field-label">{t("employees.departmentField")}</span>
               <select
                 className="field-input"
                 value={draft.departmentId}
@@ -295,13 +306,18 @@ export function EmployeesPage() {
                     value={department.departmentId}
                     disabled={!department.isActive}
                   >
-                    {department.departmentCode} · {department.departmentName}{department.isActive ? "" : " (ปิดใช้งาน)"}
+                    {department.departmentCode} · {department.departmentName}{department.isActive ? "" : ` ${t("employees.inactiveSuffix")}`}
                   </option>
                 ))}
               </select>
+              <p className="mt-1 text-xs text-[#667085]">
+                {t("employees.timezoneAfterSave", { timezone: departments.data?.items.find(
+                  (department) => department.departmentId === draft.departmentId,
+                )?.effectiveTimezone ?? t("common.noValue") })}
+              </p>
             </label>
             <label>
-              <span className="field-label">บทบาท</span>
+              <span className="field-label">{t("employees.role")}</span>
               {user.roleCode === "admin" ? (
                 <select
                   className="field-input"
@@ -312,14 +328,14 @@ export function EmployeesPage() {
                 >
                   {roles.data?.map((role) => (
                     <option key={role.roleId} value={role.roleId}>
-                      {role.roleName}
+                      {roleLabel(t, role.roleCode)}
                     </option>
                   ))}
                 </select>
               ) : (
                 <input
                   className="field-input bg-[#f8f9fc]"
-                  value={editing?.roleName}
+                  value={editing ? roleLabel(t, editing.roleCode) : ""}
                   readOnly
                 />
               )}
@@ -332,17 +348,17 @@ export function EmployeesPage() {
                   setDraft({ ...draft, isActive: event.target.checked })
                 }
               />
-              เปิดใช้งานผู้ใช้
+              {t("employees.enable")}
             </label>
             {save.isError && (
               <p role="alert" className="text-sm text-[#b42318]">
-                {save.error.message}
+                {localizedError(t, save.error)}
               </p>
             )}
             <div className="border-t border-[#e4e8f0] pt-4">
-              <h3 className="mb-2 font-semibold">ประวัติฝ่ายงาน</h3>
+              <h3 className="mb-2 font-semibold">{t("employees.history")}</h3>
               {history.isLoading ? (
-                <p className="text-sm text-[#667085]">กำลังโหลด…</p>
+                <p className="text-sm text-[#667085]">{t("common.loadingShort")}</p>
               ) : (
                 <div className="space-y-2">
                   {history.data?.map((item) => (
@@ -354,9 +370,11 @@ export function EmployeesPage() {
                         {item.departmentCode} · {item.departmentName}
                       </strong>
                       <div className="text-[#667085]">
-                        {item.assignedStartDate} –{" "}
-                        {item.assignedEndDate ?? "ปัจจุบัน"} · โดย{" "}
-                        {item.assignedByName}
+                        {t("employees.historyLine", {
+                          start: item.assignedStartDate,
+                          end: item.assignedEndDate ?? t("common.current"),
+                          name: item.assignedByName,
+                        })}
                       </div>
                     </div>
                   ))}

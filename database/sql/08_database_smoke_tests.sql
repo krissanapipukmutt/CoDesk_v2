@@ -8,6 +8,11 @@ DECLARE
     v_count integer;
     v_booking_id uuid;
     v_audit_id uuid;
+    v_tokyo_department_id uuid := gen_random_uuid();
+    v_tokyo_profile_id uuid := gen_random_uuid();
+    v_tokyo_profile_two_id uuid := gen_random_uuid();
+    v_transfer_profile_id uuid := gen_random_uuid();
+    v_tokyo_booking_id uuid;
 BEGIN
     IF (SELECT count(*) FROM information_schema.tables WHERE table_schema = 'co_desk' AND table_type = 'BASE TABLE') <> 7 THEN
         RAISE EXCEPTION 'Expected exactly seven co_desk base tables';
@@ -48,6 +53,65 @@ BEGIN
 
     INSERT INTO co_desk.departments (department_code, department_name, capacity_mode, default_capacity_per_day)
     VALUES ('GOODUNL', 'Valid unlimited', 'unlimited', NULL);
+
+    IF (SELECT effective_timezone FROM co_desk.departments WHERE department_code = 'GOODUNL') <> 'Asia/Bangkok' THEN
+        RAISE EXCEPTION 'New department did not default to Asia/Bangkok';
+    END IF;
+
+    INSERT INTO co_desk.departments (
+        department_id, department_code, department_name, capacity_mode,
+        default_capacity_per_day, effective_timezone
+    ) VALUES (
+        v_tokyo_department_id, 'TYOSMOKE', 'Tokyo smoke department', 'limited', 1, 'Asia/Tokyo'
+    );
+    IF (SELECT effective_timezone FROM co_desk.departments WHERE department_id = v_tokyo_department_id) <> 'Asia/Tokyo' THEN
+        RAISE EXCEPTION 'Asia/Tokyo department was not created correctly';
+    END IF;
+
+    UPDATE co_desk.departments SET effective_timezone = 'Asia/Singapore'
+    WHERE department_code = 'GOODUNL';
+    IF (SELECT effective_timezone FROM co_desk.departments WHERE department_code = 'GOODUNL') <> 'Asia/Singapore' THEN
+        RAISE EXCEPTION 'Department timezone edit failed';
+    END IF;
+
+    BEGIN
+        UPDATE co_desk.departments SET effective_timezone = 'Mars/Olympus'
+        WHERE department_code = 'GOODUNL';
+        RAISE EXCEPTION 'Invalid timezone was accepted';
+    EXCEPTION WHEN invalid_parameter_value THEN NULL;
+    END;
+
+    INSERT INTO co_desk.profiles (
+        profile_id, employee_code, full_name, email, department_id, role_id
+    ) VALUES (
+        v_tokyo_profile_id, 'TYO001', 'Tokyo Employee One', 'tokyo.one@example.test',
+        v_tokyo_department_id, '10000000-0000-0000-0000-000000000001'
+    ), (
+        v_tokyo_profile_two_id, 'TYO002', 'Tokyo Employee Two', 'tokyo.two@example.test',
+        v_tokyo_department_id, '10000000-0000-0000-0000-000000000001'
+    );
+    IF EXISTS (
+        SELECT 1 FROM co_desk.profiles
+        WHERE profile_id IN (v_tokyo_profile_id, v_tokyo_profile_two_id)
+          AND timezone_name <> 'Asia/Tokyo'
+    ) THEN
+        RAISE EXCEPTION 'New profile did not inherit the Tokyo department timezone';
+    END IF;
+
+    INSERT INTO co_desk.profiles (
+        profile_id, employee_code, full_name, email, department_id, role_id
+    ) VALUES (
+        v_transfer_profile_id, 'TZMOVE', 'Timezone Transfer', 'timezone.transfer@example.test',
+        '20000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001'
+    );
+    UPDATE co_desk.profiles SET department_id = v_tokyo_department_id
+    WHERE profile_id = v_transfer_profile_id;
+    IF (SELECT timezone_name FROM co_desk.profiles WHERE profile_id = v_transfer_profile_id) <> 'Asia/Tokyo' THEN
+        RAISE EXCEPTION 'Profile timezone did not synchronize on department transfer';
+    END IF;
+    SELECT count(*) INTO v_count FROM co_desk.user_department_history
+    WHERE profile_id = v_transfer_profile_id AND assigned_end_date IS NULL;
+    IF v_count <> 1 THEN RAISE EXCEPTION 'Timezone transfer broke department history'; END IF;
 
     BEGIN
         INSERT INTO co_desk.bookings (
@@ -104,6 +168,89 @@ BEGIN
         TIMESTAMPTZ '2030-01-10 10:00:00+07', TIMESTAMPTZ '2030-01-10 11:00:00+07', 'cancelled', now(),
         '30000000-0000-0000-0000-000000000003'
     );
+
+    v_result := co_desk.create_booking(
+        v_tokyo_profile_id, '30000000-0000-0000-0000-000000000001',
+        'single_day', DATE '2031-01-02', NULL, NULL, false, 'Tokyo single day',
+        'smoke-tokyo-single', '127.0.0.1', 'smoke');
+    IF NOT (v_result ->> 'success')::boolean THEN
+        RAISE EXCEPTION 'Tokyo single-day booking failed: %', v_result;
+    END IF;
+    v_tokyo_booking_id := (v_result #>> '{booking,booking_id}')::uuid;
+    IF NOT EXISTS (
+        SELECT 1 FROM co_desk.bookings
+        WHERE booking_id = v_tokyo_booking_id
+          AND booking_date_start = DATE '2031-01-02'
+          AND booking_date_end = DATE '2031-01-02'
+          AND start_at = TIMESTAMPTZ '2031-01-02 00:00:00+09'
+          AND end_at = TIMESTAMPTZ '2031-01-03 00:00:00+09'
+    ) THEN
+        RAISE EXCEPTION 'Tokyo single-day storage did not use local calendar midnight';
+    END IF;
+
+    v_result := co_desk.create_booking(
+        v_tokyo_profile_two_id, '30000000-0000-0000-0000-000000000001',
+        'date_time_range', NULL,
+        TIMESTAMPTZ '2031-01-02 00:30:00+09', TIMESTAMPTZ '2031-01-02 01:30:00+09',
+        false, 'Tokyo local-date capacity', 'smoke-tokyo-capacity', '127.0.0.1', 'smoke');
+    IF v_result ->> 'code' <> 'capacity_exceeded'
+       OR NOT jsonb_path_exists(v_result, '$.details.dates[*] ? (@.date == "2031-01-02" && @.exceeded == true)') THEN
+        RAISE EXCEPTION 'Tokyo capacity did not use the department-local date: %', v_result;
+    END IF;
+
+    INSERT INTO co_desk.holidays (
+        holiday_date, holiday_name, holiday_description, created_by_profile_id
+    ) VALUES (
+        DATE '2031-01-05', 'Global Tokyo boundary smoke',
+        'Global holiday matched against a Tokyo-local booking date',
+        '30000000-0000-0000-0000-000000000001'
+    );
+    v_result := co_desk.create_booking(
+        v_tokyo_profile_two_id, '30000000-0000-0000-0000-000000000001',
+        'date_time_range', NULL,
+        TIMESTAMPTZ '2031-01-04 23:30:00+09', TIMESTAMPTZ '2031-01-05 00:30:00+09',
+        false, 'Tokyo cross-midnight holiday', 'smoke-tokyo-holiday-rejected', '127.0.0.1', 'smoke');
+    IF v_result ->> 'code' <> 'holiday_confirmation_required' THEN
+        RAISE EXCEPTION 'Tokyo-local holiday acknowledgement was not required: %', v_result;
+    END IF;
+    v_result := co_desk.create_booking(
+        v_tokyo_profile_two_id, '30000000-0000-0000-0000-000000000001',
+        'date_time_range', NULL,
+        TIMESTAMPTZ '2031-01-04 23:30:00+09', TIMESTAMPTZ '2031-01-05 00:30:00+09',
+        true, 'Tokyo cross-midnight holiday', 'smoke-tokyo-holiday-accepted', '127.0.0.1', 'smoke');
+    IF NOT (v_result ->> 'success')::boolean
+       OR v_result #>> '{booking,booking_date_start}' <> '2031-01-04'
+       OR v_result #>> '{booking,booking_date_end}' <> '2031-01-05' THEN
+        RAISE EXCEPTION 'Tokyo cross-midnight booking dates were incorrect: %', v_result;
+    END IF;
+
+    UPDATE co_desk.departments SET effective_timezone = 'America/New_York'
+    WHERE department_id = v_tokyo_department_id;
+    IF (SELECT timezone_name FROM co_desk.profiles WHERE profile_id = v_tokyo_profile_id) <> 'Asia/Tokyo' THEN
+        RAISE EXCEPTION 'Department timezone edit retrospectively changed an existing profile';
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM co_desk.bookings
+        WHERE booking_id = v_tokyo_booking_id
+          AND booking_date_start = DATE '2031-01-02'
+          AND booking_date_end = DATE '2031-01-02'
+    ) THEN
+        RAISE EXCEPTION 'Department timezone edit shifted historical booking dates';
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM co_desk.vw_daily_department_bookings
+        WHERE department_id = v_tokyo_department_id
+          AND business_date = DATE '2031-01-02'
+    ) THEN
+        RAISE EXCEPTION 'Daily report reinterpreted a historical booking after timezone edit';
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM co_desk.booking_audit_logs
+        WHERE booking_id = v_tokyo_booking_id
+          AND new_values_json ->> 'business_timezone' = 'Asia/Tokyo'
+    ) THEN
+        RAISE EXCEPTION 'Booking audit did not preserve the booking business timezone';
+    END IF;
 
     UPDATE co_desk.departments SET default_capacity_per_day = 1
     WHERE department_id = '20000000-0000-0000-0000-000000000001';
@@ -169,6 +316,7 @@ BEGIN
     IF NOT (v_result ->> 'success')::boolean THEN RAISE EXCEPTION 'Acknowledged holiday booking failed: %', v_result; END IF;
 
     v_result := co_desk.check_booking_holidays(
+        '20000000-0000-0000-0000-000000000001',
         TIMESTAMPTZ '2026-08-12 00:00:00+07', TIMESTAMPTZ '2026-08-13 00:00:00+07');
     IF NOT (v_result ->> 'hasHolidays')::boolean THEN RAISE EXCEPTION 'Holiday detection failed'; END IF;
 

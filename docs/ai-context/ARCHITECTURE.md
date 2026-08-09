@@ -23,7 +23,6 @@
 - `features/bookings`: React Hook Form + Zod, validation warnings, holiday confirmation.
 - `pages`: booking, calendar, department, employee/history, holiday, user/role, five reports.
 - `components/ui`: reusable Tailwind/shadcn-style Button, Card, Dialog, feedback, pagination.
-- `i18n`: centralized primary navigation/common Thai text; code and contracts remain English.
+- `i18n`: centralized Thai/English resources, active-language persistence, document-language updates, and localized application-owned labels/messages; code, contracts, IANA identifiers, and database content remain unchanged.
 
 Pages are lazy-loaded. FullCalendar/Recharts/Supabase are split from the initial bundle.
-

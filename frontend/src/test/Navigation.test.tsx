@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
 import { AppNavigation } from '../layouts/AppLayout'
+import i18n from '../i18n'
 
 describe('role navigation', () => {
   it('hides report and user management menus from employee', () => {
@@ -19,5 +20,25 @@ describe('role navigation', () => {
     render(<MemoryRouter><AppNavigation role="admin" /></MemoryRouter>)
     expect(screen.getByText('ผู้ใช้และสิทธิ์')).toBeInTheDocument()
     expect(screen.getByText('จัดการวันหยุด')).toBeInTheDocument()
+  })
+  it('keeps employee permissions unchanged in English', async () => {
+    await i18n.changeLanguage('en')
+    render(<MemoryRouter><AppNavigation role="employee" /></MemoryRouter>)
+    expect(screen.getByText('Office Booking')).toBeInTheDocument()
+    expect(screen.queryByText('Reports')).not.toBeInTheDocument()
+    expect(screen.queryByText('Users & Roles')).not.toBeInTheDocument()
+  })
+  it('keeps HR permissions unchanged in English', async () => {
+    await i18n.changeLanguage('en')
+    render(<MemoryRouter><AppNavigation role="hr" /></MemoryRouter>)
+    expect(screen.getByText('Departments')).toBeInTheDocument()
+    expect(screen.getByText('Reports')).toBeInTheDocument()
+    expect(screen.queryByText('Users & Roles')).not.toBeInTheDocument()
+  })
+  it('keeps admin permissions unchanged in English', async () => {
+    await i18n.changeLanguage('en')
+    render(<MemoryRouter><AppNavigation role="admin" /></MemoryRouter>)
+    expect(screen.getByText('Users & Roles')).toBeInTheDocument()
+    expect(screen.getByText('Holidays')).toBeInTheDocument()
   })
 })

@@ -5,6 +5,8 @@ public interface ICoDeskDataService
     Task<ProfileDto?> GetProfileAsync(Guid profileId, CancellationToken cancellationToken);
     Task<IReadOnlyList<ProfileDto>> GetDemoProfilesAsync(CancellationToken cancellationToken);
     Task<IReadOnlyList<RoleDto>> GetRolesAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyList<string>> GetSupportedTimezonesAsync(CancellationToken cancellationToken);
+    Task<DepartmentDto?> GetDepartmentAsync(Guid departmentId, CancellationToken cancellationToken);
     Task<PageResult<DepartmentDto>> GetDepartmentsAsync(ListQuery query, bool includeInactive, CancellationToken cancellationToken);
     Task<DepartmentDto?> CreateDepartmentAsync(DepartmentUpsertRequest request, Guid actorId, CancellationToken cancellationToken);
     Task<DepartmentDto?> UpdateDepartmentAsync(Guid departmentId, DepartmentUpsertRequest request, CancellationToken cancellationToken);

@@ -23,6 +23,7 @@ public sealed record ProfileDto(
     string RoleName,
     bool IsActive,
     string TimezoneName,
+    string DepartmentTimezone,
     bool CanManageUsers,
     bool CanManageDepartments,
     bool CanViewReports);
@@ -38,6 +39,8 @@ public sealed record CurrentUser(
     string RoleCode,
     string RoleName,
     bool IsActive,
+    string TimezoneName,
+    string DepartmentTimezone,
     bool CanManageUsers,
     bool CanManageDepartments,
     bool CanViewReports);
@@ -59,7 +62,7 @@ public sealed record DepartmentUpsertRequest(
     string CapacityMode,
     int? DefaultCapacityPerDay,
     bool IsActive = true,
-    string EffectiveTimezone = "Asia/Bangkok");
+    string EffectiveTimezone = TimezoneRules.DefaultTimezone);
 
 public sealed record ProfileUpdateRequest(
     string EmployeeCode,
@@ -104,6 +107,7 @@ public sealed record BookingDto(
     Guid DepartmentId,
     string DepartmentCode,
     string DepartmentName,
+    string BusinessTimezone,
     string BookingMode,
     DateOnly BookingDateStart,
     DateOnly BookingDateEnd,
@@ -202,4 +206,3 @@ public sealed record ReportQuery(
 public sealed record ReportPage(IReadOnlyList<JsonElement> Items, int Total, int Page, int PageSize);
 
 public sealed record RequestMetadata(string RequestId, string? IpAddress, string? UserAgent);
-

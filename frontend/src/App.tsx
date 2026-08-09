@@ -1,9 +1,11 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { lazy, Suspense } from "react";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "./auth/useAuth";
 import { ErrorState, LoadingState } from "./components/Feedback";
 import { AppLayout } from "./layouts/AppLayout";
 import type { RoleCode } from "./types";
+import { localizedError } from "./i18n/format";
 
 const AdminUsersPage = lazy(() =>
   import("./pages/AdminUsersPage").then((module) => ({
@@ -77,13 +79,14 @@ function RoleRoute({
   );
 }
 export default function App() {
+  const { t } = useTranslation();
   const auth = useAuth();
   return (
     <>
       {auth.error && (
         <div className="fixed inset-x-0 top-0 z-[100] bg-[#fef3f2] p-2 text-center text-sm text-[#b42318]">
           <ErrorState
-            message={auth.error}
+            message={localizedError(t, new Error(auth.error))}
             onRetry={() => void auth.refresh()}
           />
         </div>

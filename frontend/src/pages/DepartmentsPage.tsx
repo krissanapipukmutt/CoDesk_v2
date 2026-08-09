@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Search } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { apiFetch, toQuery } from "../api/client";
 import { EmptyState, ErrorState, LoadingState } from "../components/Feedback";
 import { Pagination } from "../components/Pagination";
@@ -8,6 +9,8 @@ import { Button } from "../components/ui/Button";
 import { Card, PageHeader } from "../components/ui/Card";
 import { Dialog } from "../components/ui/Dialog";
 import type { Department, PageResult } from "../types";
+import { capacityModeLabel, localizedError } from "../i18n/format";
+import { DEFAULT_TIMEZONE } from "../utils/date";
 
 interface DepartmentDraft {
   departmentCode: string;
@@ -23,10 +26,11 @@ const blank: DepartmentDraft = {
   capacityMode: "limited",
   defaultCapacityPerDay: "1",
   isActive: true,
-  effectiveTimezone: "Asia/Bangkok",
+  effectiveTimezone: DEFAULT_TIMEZONE,
 };
 
 export function DepartmentsPage() {
+  const { t } = useTranslation();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [sortBy, setSortBy] = useState("departmentName");
@@ -52,6 +56,13 @@ export function DepartmentsPage() {
           }),
       ),
   });
+  const timezones = useQuery({
+    queryKey: ["supported-timezones"],
+    queryFn: () => apiFetch<string[]>("/api/departments/timezones"),
+    staleTime: Number.POSITIVE_INFINITY,
+  });
+  const timezoneIsValid =
+    timezones.data?.includes(draft.effectiveTimezone) ?? false;
   const save = useMutation({
     mutationFn: () =>
       apiFetch<Department>(
@@ -70,7 +81,7 @@ export function DepartmentsPage() {
         },
       ),
     onSuccess: async () => {
-      setSuccess(editing ? "แก้ไขฝ่ายงานสำเร็จ" : "เพิ่มฝ่ายงานสำเร็จ");
+      setSuccess(editing ? "departments.updated" : "departments.added");
       setEditing(undefined);
       await client.invalidateQueries({ queryKey: ["departments"] });
     },
@@ -95,18 +106,18 @@ export function DepartmentsPage() {
   return (
     <>
       <PageHeader
-        title="จัดการฝ่ายงาน"
-        description="กำหนดความจุรายวันหรือเลือกไม่จำกัด โดยใช้การปิดใช้งานแบบ Soft Delete"
+        title={t("departments.title")}
+        description={t("departments.description")}
         action={
           <Button onClick={() => open()}>
             <Plus size={17} />
-            เพิ่มฝ่ายงาน
+            {t("departments.add")}
           </Button>
         }
       />
       <Card>
         {success && (
-          <div className="mb-4 rounded-xl bg-[#ecfdf3] p-3 text-sm text-[#067647]">{success}</div>
+          <div className="mb-4 rounded-xl bg-[#ecfdf3] p-3 text-sm text-[#067647]">{t(success)}</div>
         )}
         <div className="mb-4 flex flex-wrap gap-2">
           <div className="relative max-w-md flex-1">
@@ -115,18 +126,18 @@ export function DepartmentsPage() {
               size={17}
             />
             <input
-              aria-label="ค้นหาฝ่ายงาน"
+              aria-label={t("departments.searchLabel")}
               className="field-input pl-9"
               value={search}
               onChange={(event) => {
                 setSearch(event.target.value);
                 setPage(1);
               }}
-              placeholder="รหัสหรือชื่อฝ่าย"
+              placeholder={t("departments.searchPlaceholder")}
             />
           </div>
           <select
-            aria-label="เรียงฝ่ายงานตาม"
+            aria-label={t("departments.sortLabel")}
             className="field-input w-auto"
             value={sortBy}
             onChange={(event) => {
@@ -134,21 +145,21 @@ export function DepartmentsPage() {
               setPage(1);
             }}
           >
-            <option value="departmentName">ชื่อฝ่าย</option>
-            <option value="capacityMode">รูปแบบความจุ</option>
-            <option value="isActive">สถานะ</option>
+            <option value="departmentName">{t("departments.name")}</option>
+            <option value="capacityMode">{t("departments.capacityMode")}</option>
+            <option value="isActive">{t("departments.status")}</option>
           </select>
           <Button
             variant="secondary"
             onClick={() => setSortDirection((value) => (value === "asc" ? "desc" : "asc"))}
           >
-            {sortDirection === "asc" ? "น้อย → มาก" : "มาก → น้อย"}
+            {sortDirection === "asc" ? t("common.ascending") : t("common.descending")}
           </Button>
         </div>
         {query.isLoading ? (
           <LoadingState />
         ) : query.isError ? (
-          <ErrorState message={query.error.message} />
+          <ErrorState message={localizedError(t, query.error)} />
         ) : !query.data?.items.length ? (
           <EmptyState />
         ) : (
@@ -157,12 +168,12 @@ export function DepartmentsPage() {
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>รหัส</th>
-                    <th>ชื่อฝ่าย</th>
-                    <th>รูปแบบความจุ</th>
-                    <th>ความจุ/วัน</th>
-                    <th>เขตเวลา</th>
-                    <th>สถานะ</th>
+                    <th>{t("departments.code")}</th>
+                    <th>{t("departments.name")}</th>
+                    <th>{t("departments.capacityMode")}</th>
+                    <th>{t("departments.capacityPerDay")}</th>
+                    <th>{t("departments.timezone")}</th>
+                    <th>{t("departments.status")}</th>
                     <th />
                   </tr>
                 </thead>
@@ -174,9 +185,7 @@ export function DepartmentsPage() {
                       </td>
                       <td>{department.departmentName}</td>
                       <td>
-                        {department.capacityMode === "limited"
-                          ? "จำกัด"
-                          : "ไม่จำกัด"}
+                        {capacityModeLabel(t, department.capacityMode)}
                       </td>
                       <td>{department.defaultCapacityPerDay ?? "—"}</td>
                       <td>{department.effectiveTimezone}</td>
@@ -184,7 +193,7 @@ export function DepartmentsPage() {
                         <span
                           className={`status-pill ${department.isActive ? "status-active" : "status-inactive"}`}
                         >
-                          {department.isActive ? "ใช้งาน" : "ปิดใช้งาน"}
+                          {department.isActive ? t("common.active") : t("common.inactive")}
                         </span>
                       </td>
                       <td>
@@ -193,7 +202,7 @@ export function DepartmentsPage() {
                           variant="secondary"
                           onClick={() => open(department)}
                         >
-                          แก้ไข
+                          {t("common.edit")}
                         </Button>
                       </td>
                     </tr>
@@ -215,30 +224,31 @@ export function DepartmentsPage() {
         onOpenChange={(value) => {
           if (!value) setEditing(undefined);
         }}
-        title={editing ? "แก้ไขฝ่ายงาน" : "เพิ่มฝ่ายงาน"}
+        title={editing ? t("departments.edit") : t("departments.add")}
         footer={
           <>
             <Button variant="secondary" onClick={() => setEditing(undefined)}>
-              ยกเลิก
+              {t("common.cancel")}
             </Button>
             <Button
               disabled={
                 save.isPending ||
                 !draft.departmentCode ||
                 !draft.departmentName ||
+                !timezoneIsValid ||
                 (draft.capacityMode === "limited" &&
                   Number(draft.defaultCapacityPerDay) <= 0)
               }
               onClick={() => save.mutate()}
             >
-              บันทึก
+              {t("common.save")}
             </Button>
           </>
         }
       >
         <div className="space-y-4">
           <label>
-            <span className="field-label">รหัสฝ่าย</span>
+            <span className="field-label">{t("departments.codeField")}</span>
             <input
               className="field-input"
               value={draft.departmentCode}
@@ -248,7 +258,7 @@ export function DepartmentsPage() {
             />
           </label>
           <label>
-            <span className="field-label">ชื่อฝ่าย</span>
+            <span className="field-label">{t("departments.name")}</span>
             <input
               className="field-input"
               value={draft.departmentName}
@@ -258,7 +268,7 @@ export function DepartmentsPage() {
             />
           </label>
           <label>
-            <span className="field-label">รูปแบบความจุ</span>
+            <span className="field-label">{t("departments.capacityMode")}</span>
             <select
               className="field-input"
               value={draft.capacityMode}
@@ -272,13 +282,13 @@ export function DepartmentsPage() {
                 })
               }
             >
-              <option value="limited">จำกัด</option>
-              <option value="unlimited">ไม่จำกัด</option>
+              <option value="limited">{t("status.limited")}</option>
+              <option value="unlimited">{t("status.unlimited")}</option>
             </select>
           </label>
           {draft.capacityMode === "limited" && (
             <label>
-              <span className="field-label">จำนวนสูงสุดต่อวัน</span>
+              <span className="field-label">{t("departments.maximumPerDay")}</span>
               <input
                 className="field-input"
                 type="number"
@@ -294,12 +304,31 @@ export function DepartmentsPage() {
             </label>
           )}
           <label>
-            <span className="field-label">เขตเวลา</span>
+            <span className="field-label">{t("departments.timezone")}</span>
             <input
+              aria-label={t("departments.timezone")}
               className="field-input"
+              list="supported-timezones"
+              autoComplete="off"
               value={draft.effectiveTimezone}
-              readOnly
+              onChange={(event) =>
+                setDraft({ ...draft, effectiveTimezone: event.target.value })
+              }
             />
+            <datalist id="supported-timezones">
+              {timezones.data?.map((timezoneName) => (
+                <option key={timezoneName} value={timezoneName} />
+              ))}
+            </datalist>
+            <p className="mt-1 text-xs text-[#667085]">
+              {t("departments.timezoneHelp")}
+            </p>
+            {draft.effectiveTimezone && !timezoneIsValid && !timezones.isLoading && (
+              <p className="field-error">{t("departments.timezoneInvalid")}</p>
+            )}
+            {timezones.isError && (
+              <p className="field-error">{t("departments.timezoneLoadFailed")}</p>
+            )}
           </label>
           <label className="flex items-center gap-2">
             <input
@@ -309,11 +338,11 @@ export function DepartmentsPage() {
                 setDraft({ ...draft, isActive: event.target.checked })
               }
             />
-            เปิดใช้งานฝ่าย
+            {t("departments.enable")}
           </label>
           {save.isError && (
             <p role="alert" className="text-sm text-[#b42318]">
-              {save.error.message}
+              {localizedError(t, save.error)}
             </p>
           )}
         </div>

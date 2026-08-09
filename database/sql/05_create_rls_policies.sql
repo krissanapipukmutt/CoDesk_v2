@@ -132,7 +132,7 @@ BEGIN
             co_desk.cancel_booking(uuid, uuid, text, text, inet, text),
             co_desk.check_booking_conflict(uuid, timestamptz, timestamptz, uuid),
             co_desk.check_department_capacity(uuid, timestamptz, timestamptz, uuid),
-            co_desk.check_booking_holidays(timestamptz, timestamptz) FROM authenticated;
+            co_desk.check_booking_holidays(uuid, timestamptz, timestamptz) FROM authenticated;
     END IF;
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
         REVOKE ALL ON FUNCTION co_desk.create_booking(uuid, uuid, text, date, timestamptz, timestamptz, boolean, text, text, inet, text),

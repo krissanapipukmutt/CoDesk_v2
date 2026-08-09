@@ -90,11 +90,12 @@ public sealed class AuthorizationRulesTests
 
     private static CurrentUser User(Guid id, string role, Guid departmentId) => new(
         id, "CODE", "Test User", "test@example.test", departmentId, "DEP", "Department",
-        role, role, true, role == RoleCodes.Admin, role is RoleCodes.Hr or RoleCodes.Admin,
+        role, role, true, "Asia/Bangkok", "Asia/Bangkok",
+        role == RoleCodes.Admin, role is RoleCodes.Hr or RoleCodes.Admin,
         role is RoleCodes.Hr or RoleCodes.Admin);
 
     private static BookingDto Booking(Guid departmentId, Guid ownerId) => new(
-        Guid.NewGuid(), ownerId, "EMP", "Owner", ownerId, "Owner", departmentId, "DEP", "Department",
+        Guid.NewGuid(), ownerId, "EMP", "Owner", ownerId, "Owner", departmentId, "DEP", "Department", "Asia/Bangkok",
         BookingModes.SingleDay, new DateOnly(2026, 8, 3), new DateOnly(2026, 8, 3),
         DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddDays(1), false, BookingStatuses.Booked,
         null, null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
@@ -106,4 +107,3 @@ public sealed class AuthorizationRulesTests
         public Task DeleteUserAsync(Guid userId, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 }
-

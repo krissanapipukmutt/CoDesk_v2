@@ -1,9 +1,11 @@
 import { Building2, Menu, UserRoundCog, X } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { isDemoMode } from "../api/client";
 import { useAuth } from "../auth/useAuth";
-import { copy } from "../i18n/copy";
+import { LanguageSwitcher } from "../components/LanguageSwitcher";
+import { roleLabel } from "../i18n/format";
 import type { RoleCode } from "../types";
 import { cn } from "../utils/cn";
 import { navigationForRole } from "./navigation";
@@ -15,9 +17,10 @@ export function AppNavigation({
   role: RoleCode;
   onNavigate?: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <nav className="space-y-1 px-3">
-      {navigationForRole(role).map(({ to, label, icon: Icon }) => (
+      {navigationForRole(role).map(({ to, labelKey, icon: Icon }) => (
         <NavLink
           key={to}
           to={to}
@@ -33,7 +36,7 @@ export function AppNavigation({
           }
         >
           <Icon size={19} />
-          {label}
+          {t(labelKey)}
         </NavLink>
       ))}
     </nav>
@@ -41,6 +44,7 @@ export function AppNavigation({
 }
 
 export function AppLayout() {
+  const { t } = useTranslation();
   const { user, signOut } = useAuth();
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
@@ -57,7 +61,7 @@ export function AppLayout() {
         </div>
         <div>
           <div className="font-bold">CoDesk</div>
-          <div className="text-xs text-[#667085]">{copy.tagline}</div>
+          <div className="text-xs text-[#667085]">{t("app.tagline")}</div>
         </div>
       </div>
       <div className="flex-1 overflow-auto py-4">
@@ -73,7 +77,7 @@ export function AppLayout() {
               {user.fullName}
             </div>
             <div className="truncate text-xs text-[#667085]">
-              {copy.roles[user.roleCode]} · {user.departmentCode}
+              {roleLabel(t, user.roleCode)} · {user.departmentCode}
             </div>
           </div>
         </div>
@@ -81,7 +85,7 @@ export function AppLayout() {
           className="w-full rounded-lg border border-[#d0d5dd] px-3 py-2 text-xs font-semibold text-[#475467]"
           onClick={() => void leave()}
         >
-          {isDemoMode ? copy.switchRole : "ออกจากระบบ"}
+          {isDemoMode ? t("common.switchRole") : t("common.signOut")}
         </button>
       </div>
     </aside>
@@ -94,7 +98,7 @@ export function AppLayout() {
       {open && (
         <div className="fixed inset-0 z-40 lg:hidden">
           <button
-            aria-label="ปิดเมนู"
+            aria-label={t("navigation.close")}
             className="absolute inset-0 bg-black/40"
             onClick={() => setOpen(false)}
           />
@@ -105,7 +109,7 @@ export function AppLayout() {
       )}
       <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-[#e4e8f0] bg-white px-4 lg:ml-64 lg:px-8">
         <button
-          aria-label="เปิดเมนู"
+          aria-label={t("navigation.open")}
           className="lg:hidden"
           onClick={() => setOpen(true)}
         >
@@ -113,11 +117,12 @@ export function AppLayout() {
         </button>
         <div className="ml-auto flex items-center gap-3">
           {isDemoMode && (
-            <span className="status-pill status-warning">{copy.demoMode}</span>
+            <span className="status-pill status-warning">{t("common.demoMode")}</span>
           )}
           <span className="hidden text-sm text-[#667085] sm:inline">
-            Asia/Bangkok
+            {user.timezoneName}
           </span>
+          <LanguageSwitcher />
         </div>
       </header>
       <main className="p-4 lg:ml-64 lg:p-8">

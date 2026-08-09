@@ -2,9 +2,11 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import dayjs from "dayjs";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
+import { useTranslation } from "react-i18next";
 import { z } from "zod";
 import { Button } from "../../components/ui/Button";
 import { Dialog } from "../../components/ui/Dialog";
+import { localizedError } from "../../i18n/format";
 import type {
   Booking,
   BookingMode,
@@ -16,47 +18,47 @@ import { localDateTimeToIso, todayBusinessDate } from "../../utils/date";
 
 const schema = z
   .object({
-    bookedForProfileId: z.string().min(1, "กรุณาเลือกพนักงาน"),
+    bookedForProfileId: z.string().min(1, "booking.validation.employee"),
     bookingMode: z.enum(["single_day", "date_time_range"]),
     singleDate: z.string(),
     startDate: z.string(),
     startTime: z.string(),
     endDate: z.string(),
     endTime: z.string(),
-    noteText: z.string().max(2000, "หมายเหตุต้องไม่เกิน 2,000 ตัวอักษร"),
+    noteText: z.string().max(2000, "booking.validation.notes"),
   })
   .superRefine((value, context) => {
     if (value.bookingMode === "single_day" && !value.singleDate)
       context.addIssue({
         code: "custom",
         path: ["singleDate"],
-        message: "กรุณาเลือกวันที่",
+        message: "booking.validation.date",
       });
     if (value.bookingMode === "date_time_range") {
       if (!value.startDate || !value.startTime)
         context.addIssue({
           code: "custom",
           path: ["startDate"],
-          message: "กรุณาระบุวันและเวลาเริ่ม",
+          message: "booking.validation.start",
         });
       if (!value.endDate || !value.endTime)
         context.addIssue({
           code: "custom",
           path: ["endDate"],
-          message: "กรุณาระบุวันและเวลาสิ้นสุด",
+          message: "booking.validation.end",
         });
       if (
         value.startDate &&
         value.startTime &&
         value.endDate &&
         value.endTime &&
-        localDateTimeToIso(value.endDate, value.endTime) <=
-          localDateTimeToIso(value.startDate, value.startTime)
+        `${value.endDate}T${value.endTime}` <=
+          `${value.startDate}T${value.startTime}`
       )
         context.addIssue({
           code: "custom",
           path: ["endDate"],
-          message: "เวลาสิ้นสุดต้องอยู่หลังเวลาเริ่ม",
+          message: "booking.validation.range",
         });
     }
   });
@@ -72,13 +74,16 @@ export interface BookingPayload {
   actionReason?: string;
 }
 
-const emptyDefaults = (userId: string): BookingFormValues => ({
+const emptyDefaults = (
+  userId: string,
+  timezoneName: string,
+): BookingFormValues => ({
   bookedForProfileId: userId,
   bookingMode: "single_day",
-  singleDate: todayBusinessDate(),
-  startDate: todayBusinessDate(),
+  singleDate: todayBusinessDate(timezoneName),
+  startDate: todayBusinessDate(timezoneName),
   startTime: "09:00",
-  endDate: todayBusinessDate(),
+  endDate: todayBusinessDate(timezoneName),
   endTime: "17:00",
   noteText: "",
 });
@@ -100,26 +105,34 @@ export function BookingForm({
   saving?: boolean;
   serverError?: string | null;
 }) {
-  const [warning, setWarning] = useState<string | null>(null);
+  const { t } = useTranslation();
+  const [warning, setWarning] = useState<{ key?: string; error?: unknown } | null>(null);
   const [pending, setPending] = useState<BookingPayload | null>(null);
   const [holidayNames, setHolidayNames] = useState<string[]>([]);
   const form = useForm<BookingFormValues>({
     resolver: zodResolver(schema),
-    defaultValues: emptyDefaults(user.profileId),
+    defaultValues: emptyDefaults(user.profileId, user.departmentTimezone),
   });
   const mode = form.watch("bookingMode");
   const selectedId = form.watch("bookedForProfileId");
   const selected =
     profiles.find((profile) => profile.profileId === selectedId) ??
     (user.profileId === selectedId ? user : null);
+  const selectedTimezone =
+    selected?.departmentTimezone ?? user.departmentTimezone;
+  const editingTimezone =
+    profiles.find((profile) => profile.profileId === editing?.bookedForProfileId)
+      ?.departmentTimezone ??
+    editing?.businessTimezone ??
+    user.departmentTimezone;
 
   useEffect(() => {
     if (!editing) {
-      form.reset(emptyDefaults(user.profileId));
+      form.reset(emptyDefaults(user.profileId, user.departmentTimezone));
       return;
     }
-    const start = dayjs(editing.startAt).tz("Asia/Bangkok");
-    const end = dayjs(editing.endAt).tz("Asia/Bangkok");
+    const start = dayjs(editing.startAt).tz(editingTimezone);
+    const end = dayjs(editing.endAt).tz(editingTimezone);
     form.reset({
       bookedForProfileId: editing.bookedForProfileId,
       bookingMode: editing.bookingMode,
@@ -130,7 +143,7 @@ export function BookingForm({
       endTime: end.format("HH:mm"),
       noteText: editing.noteText ?? "",
     });
-  }, [editing, form, user.profileId]);
+  }, [editing, editingTimezone, form, user.departmentTimezone, user.profileId]);
 
   const toPayload = (
     values: BookingFormValues,
@@ -145,30 +158,38 @@ export function BookingForm({
           endAt: null,
           holidayWarningAcknowledged: acknowledged,
           noteText: values.noteText,
-          actionReason: editing ? "แก้ไขผ่านหน้าจอ CoDesk" : undefined,
+          actionReason: editing ? t("booking.updateReason") : undefined,
         }
       : {
           bookedForProfileId: values.bookedForProfileId,
           bookingMode: values.bookingMode,
           bookingDateStart: null,
-          startAt: localDateTimeToIso(values.startDate, values.startTime),
-          endAt: localDateTimeToIso(values.endDate, values.endTime),
+          startAt: localDateTimeToIso(
+            values.startDate,
+            values.startTime,
+            selectedTimezone,
+          ),
+          endAt: localDateTimeToIso(
+            values.endDate,
+            values.endTime,
+            selectedTimezone,
+          ),
           holidayWarningAcknowledged: acknowledged,
           noteText: values.noteText,
-          actionReason: editing ? "แก้ไขผ่านหน้าจอ CoDesk" : undefined,
+          actionReason: editing ? t("booking.updateReason") : undefined,
         };
 
   const submit = async (values: BookingFormValues) => {
     setWarning(null);
-    const payload = toPayload(values);
     try {
+      const payload = toPayload(values);
       const result = await onValidate(payload);
       if (result.conflict.hasConflict) {
-        setWarning("ช่วงเวลานี้ซ้อนกับรายการจองเดิมของพนักงาน");
+        setWarning({ key: "errors.booking_conflict" });
         return;
       }
       if (!result.capacity.isAvailable) {
-        setWarning("จำนวนผู้จองเกินความจุของฝ่ายในอย่างน้อยหนึ่งวัน");
+        setWarning({ key: "errors.capacity_exceeded" });
         return;
       }
       if (result.holidays.hasHolidays) {
@@ -181,12 +202,12 @@ export function BookingForm({
         return;
       }
       await onSave(payload);
-      form.reset(emptyDefaults(user.profileId));
+      form.reset(emptyDefaults(user.profileId, user.departmentTimezone));
     } catch (caught) {
       setWarning(
-        caught instanceof Error
-          ? caught.message
-          : "ไม่สามารถบันทึกรายการจองได้",
+        caught instanceof RangeError && caught.message === "invalid_local_time"
+          ? { key: "booking.validation.localTime" }
+          : { error: caught },
       );
     }
   };
@@ -195,37 +216,33 @@ export function BookingForm({
     try {
       await onSave({ ...pending, holidayWarningAcknowledged: true });
       setPending(null);
-      form.reset(emptyDefaults(user.profileId));
+      form.reset(emptyDefaults(user.profileId, user.departmentTimezone));
     } catch (caught) {
-      setWarning(
-        caught instanceof Error
-          ? caught.message
-          : "ไม่สามารถบันทึกรายการจองได้",
-      );
+      setWarning({ error: caught });
     }
   };
   const reset = () => {
-    form.reset(emptyDefaults(user.profileId));
+    form.reset(emptyDefaults(user.profileId, user.departmentTimezone));
     setWarning(null);
   };
 
   return (
     <>
       <form
-        aria-label="แบบฟอร์มจองเข้าออฟฟิศ"
+        aria-label={t("booking.formLabel")}
         className="space-y-4"
         onSubmit={(event) => void form.handleSubmit(submit)(event)}
       >
         <div className="grid gap-4 sm:grid-cols-2">
           <label>
-            <span className="field-label">รูปแบบการจอง</span>
+            <span className="field-label">{t("booking.mode")}</span>
             <select className="field-input" {...form.register("bookingMode")}>
-              <option value="single_day">รายวัน (เต็มวัน)</option>
-              <option value="date_time_range">ช่วงวันและเวลา</option>
+              <option value="single_day">{t("booking.modeSingle")}</option>
+              <option value="date_time_range">{t("booking.modeRange")}</option>
             </select>
           </label>
           <label>
-            <span className="field-label">พนักงาน</span>
+            <span className="field-label">{t("booking.employee")}</span>
             {user.roleCode === "admin" ? (
               <select
                 className="field-input"
@@ -247,42 +264,47 @@ export function BookingForm({
               />
             )}
             <p className="field-error">
-              {form.formState.errors.bookedForProfileId?.message}
+              {form.formState.errors.bookedForProfileId?.message
+                ? t(form.formState.errors.bookedForProfileId.message)
+                : null}
             </p>
           </label>
         </div>
         <div className="rounded-xl bg-[#f8f9fc] p-3 text-sm">
-          <span className="text-[#667085]">ฝ่ายงาน: </span>
+          <span className="text-[#667085]">{t("booking.department")} </span>
           <strong>
             {selected?.departmentCode} · {selected?.departmentName}
           </strong>
+          <span className="ml-2 text-[#667085]">({selectedTimezone})</span>
         </div>
         {mode === "single_day" ? (
           <label>
-            <span className="field-label">วันที่</span>
+            <span className="field-label">{t("booking.date")}</span>
             <input
-              aria-label="วันที่จอง"
+              aria-label={t("booking.bookingDate")}
               type="date"
               className="field-input"
               {...form.register("singleDate")}
             />
             <p className="field-error">
-              {form.formState.errors.singleDate?.message}
+              {form.formState.errors.singleDate?.message
+                ? t(form.formState.errors.singleDate.message)
+                : null}
             </p>
           </label>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <span className="field-label">เริ่มต้น</span>
+              <span className="field-label">{t("booking.start")}</span>
               <div className="grid grid-cols-2 gap-2">
                 <input
-                  aria-label="วันที่เริ่ม"
+                  aria-label={t("booking.startDate")}
                   type="date"
                   className="field-input"
                   {...form.register("startDate")}
                 />
                 <input
-                  aria-label="เวลาเริ่ม"
+                  aria-label={t("booking.startTime")}
                   type="time"
                   step="60"
                   className="field-input"
@@ -290,20 +312,22 @@ export function BookingForm({
                 />
               </div>
               <p className="field-error">
-                {form.formState.errors.startDate?.message}
+                {form.formState.errors.startDate?.message
+                  ? t(form.formState.errors.startDate.message)
+                  : null}
               </p>
             </div>
             <div>
-              <span className="field-label">สิ้นสุด</span>
+              <span className="field-label">{t("booking.end")}</span>
               <div className="grid grid-cols-2 gap-2">
                 <input
-                  aria-label="วันที่สิ้นสุด"
+                  aria-label={t("booking.endDate")}
                   type="date"
                   className="field-input"
                   {...form.register("endDate")}
                 />
                 <input
-                  aria-label="เวลาสิ้นสุด"
+                  aria-label={t("booking.endTime")}
                   type="time"
                   step="60"
                   className="field-input"
@@ -311,19 +335,23 @@ export function BookingForm({
                 />
               </div>
               <p className="field-error">
-                {form.formState.errors.endDate?.message}
+                {form.formState.errors.endDate?.message
+                  ? t(form.formState.errors.endDate.message)
+                  : null}
               </p>
             </div>
           </div>
         )}
         <label>
-          <span className="field-label">หมายเหตุ</span>
+          <span className="field-label">{t("booking.notes")}</span>
           <textarea
             className="field-input min-h-24"
             {...form.register("noteText")}
           />
           <p className="field-error">
-            {form.formState.errors.noteText?.message}
+            {form.formState.errors.noteText?.message
+              ? t(form.formState.errors.noteText.message)
+              : null}
           </p>
         </label>
         {(warning || serverError) && (
@@ -331,19 +359,23 @@ export function BookingForm({
             role="alert"
             className="rounded-xl border border-[#fecdca] bg-[#fef3f2] p-3 text-sm text-[#b42318]"
           >
-            {warning ?? serverError}
+            {warning
+              ? warning.key
+                ? t(warning.key)
+                : localizedError(t, warning.error)
+              : serverError}
           </div>
         )}
         <div className="flex flex-wrap gap-2">
           <Button type="submit" disabled={saving}>
             {saving
-              ? "กำลังบันทึก…"
+              ? t("common.saving")
               : editing
-                ? "บันทึกการแก้ไข"
-                : "บันทึกการจอง"}
+                ? t("booking.update")
+                : t("booking.create")}
           </Button>
           <Button variant="secondary" onClick={reset}>
-            ล้างค่า
+            {t("common.reset")}
           </Button>
         </div>
       </form>
@@ -352,15 +384,15 @@ export function BookingForm({
         onOpenChange={(open) => {
           if (!open) setPending(null);
         }}
-        title="วันที่เลือกตรงกับวันหยุด"
-        description="ระบบอนุญาตให้จองได้ แต่ต้องยืนยันว่ารับทราบวันหยุด"
+        title={t("booking.holidayTitle")}
+        description={t("booking.holidayDescription")}
         footer={
           <>
             <Button variant="secondary" onClick={() => setPending(null)}>
-              กลับไปแก้ไข
+              {t("booking.holidayBack")}
             </Button>
             <Button onClick={() => void confirmHoliday()}>
-              ยืนยันและบันทึก
+              {t("booking.holidayConfirm")}
             </Button>
           </>
         }
@@ -377,7 +409,7 @@ export function BookingForm({
         </ul>
         {warning && (
           <p role="alert" className="mt-3 text-sm text-[#b42318]">
-            {warning}
+            {warning.key ? t(warning.key) : localizedError(t, warning.error)}
           </p>
         )}
       </Dialog>

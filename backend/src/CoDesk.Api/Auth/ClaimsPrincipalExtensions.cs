@@ -18,7 +18,7 @@ public static class ClaimsPrincipalExtensions
             profile.ProfileId, profile.EmployeeCode, profile.FullName, profile.Email,
             profile.DepartmentId, profile.DepartmentCode, profile.DepartmentName,
             profile.RoleCode, profile.RoleName, profile.IsActive,
+            profile.TimezoneName, profile.DepartmentTimezone,
             profile.CanManageUsers, profile.CanManageDepartments, profile.CanViewReports);
     }
 }
-

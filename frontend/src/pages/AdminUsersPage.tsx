@@ -1,12 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Search } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { apiFetch, toQuery } from "../api/client";
 import { EmptyState, ErrorState, LoadingState } from "../components/Feedback";
 import { Button } from "../components/ui/Button";
 import { Card, PageHeader } from "../components/ui/Card";
 import { Dialog } from "../components/ui/Dialog";
 import type { Department, PageResult, Profile, Role } from "../types";
+import { localizedError, roleLabel } from "../i18n/format";
 
 interface Draft {
   employeeCode: string;
@@ -27,6 +29,7 @@ const blank: Draft = {
   isActive: true,
 };
 export function AdminUsersPage() {
+  const { t } = useTranslation();
   const [search, setSearch] = useState("");
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(blank);
@@ -73,12 +76,12 @@ export function AdminUsersPage() {
   return (
     <>
       <PageHeader
-        title="ผู้ใช้และสิทธิ์"
-        description="สร้างบัญชีผ่าน Backend และ Supabase Admin API เท่านั้น คีย์ Service Role ไม่ถูกส่งไปเบราว์เซอร์"
+        title={t("users.title")}
+        description={t("users.description")}
         action={
           <Button onClick={begin}>
             <Plus size={17} />
-            สร้างผู้ใช้
+            {t("users.create")}
           </Button>
         }
       />
@@ -86,17 +89,17 @@ export function AdminUsersPage() {
         <div className="mb-4 relative max-w-md">
           <Search className="absolute left-3 top-3 text-[#98a2b3]" size={17} />
           <input
-            aria-label="ค้นหาผู้ใช้"
+            aria-label={t("users.searchLabel")}
             className="field-input pl-9"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="รหัส ชื่อ หรืออีเมล"
+            placeholder={t("users.searchPlaceholder")}
           />
         </div>
         {users.isLoading ? (
           <LoadingState />
         ) : users.isError ? (
-          <ErrorState message={users.error.message} />
+          <ErrorState message={localizedError(t, users.error)} />
         ) : !users.data?.items.length ? (
           <EmptyState />
         ) : (
@@ -104,12 +107,13 @@ export function AdminUsersPage() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>รหัส</th>
-                  <th>ชื่อ</th>
-                  <th>อีเมล</th>
-                  <th>ฝ่าย</th>
-                  <th>บทบาท</th>
-                  <th>สถานะ</th>
+                  <th>{t("users.code")}</th>
+                  <th>{t("users.name")}</th>
+                  <th>{t("users.email")}</th>
+                  <th>{t("users.department")}</th>
+                  <th>{t("users.profileTimezone")}</th>
+                  <th>{t("users.role")}</th>
+                  <th>{t("users.status")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -119,12 +123,13 @@ export function AdminUsersPage() {
                     <td>{profile.fullName}</td>
                     <td>{profile.email}</td>
                     <td>{profile.departmentCode}</td>
-                    <td>{profile.roleName}</td>
+                    <td>{profile.timezoneName}</td>
+                    <td>{roleLabel(t, profile.roleCode)}</td>
                     <td>
                       <span
                         className={`status-pill ${profile.isActive ? "status-active" : "status-inactive"}`}
                       >
-                        {profile.isActive ? "ใช้งาน" : "ปิดใช้งาน"}
+                        {profile.isActive ? t("common.active") : t("common.inactive")}
                       </span>
                     </td>
                   </tr>
@@ -137,12 +142,12 @@ export function AdminUsersPage() {
       <Dialog
         open={open}
         onOpenChange={setOpen}
-        title="สร้างบัญชีผู้ใช้"
-        description="ระบบจะสร้าง Auth user และ Profile ด้วย UUID เดียวกัน"
+        title={t("users.dialogTitle")}
+        description={t("users.dialogDescription")}
         footer={
           <>
             <Button variant="secondary" onClick={() => setOpen(false)}>
-              ยกเลิก
+              {t("common.cancel")}
             </Button>
             <Button
               disabled={
@@ -156,7 +161,7 @@ export function AdminUsersPage() {
               }
               onClick={() => save.mutate()}
             >
-              สร้างผู้ใช้
+              {t("users.create")}
             </Button>
           </>
         }
@@ -164,7 +169,7 @@ export function AdminUsersPage() {
         <div className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <label>
-              <span className="field-label">รหัสพนักงาน</span>
+              <span className="field-label">{t("users.employeeCode")}</span>
               <input
                 className="field-input"
                 value={draft.employeeCode}
@@ -174,7 +179,7 @@ export function AdminUsersPage() {
               />
             </label>
             <label>
-              <span className="field-label">ชื่อ-นามสกุล</span>
+              <span className="field-label">{t("users.fullName")}</span>
               <input
                 className="field-input"
                 value={draft.fullName}
@@ -185,7 +190,7 @@ export function AdminUsersPage() {
             </label>
           </div>
           <label>
-            <span className="field-label">อีเมล</span>
+            <span className="field-label">{t("users.email")}</span>
             <input
               type="email"
               className="field-input"
@@ -197,7 +202,7 @@ export function AdminUsersPage() {
           </label>
           <label>
             <span className="field-label">
-              รหัสผ่านชั่วคราว (อย่างน้อย 8 ตัวอักษร)
+              {t("users.temporaryPassword")}
             </span>
             <input
               type="password"
@@ -209,7 +214,7 @@ export function AdminUsersPage() {
             />
           </label>
           <label>
-            <span className="field-label">ฝ่ายงาน</span>
+            <span className="field-label">{t("users.departmentField")}</span>
             <select
               className="field-input"
               value={draft.departmentId}
@@ -225,9 +230,14 @@ export function AdminUsersPage() {
                   </option>
                 ))}
             </select>
+            <p className="mt-1 text-xs text-[#667085]">
+              {t("users.timezoneHint", { timezone: departments.data?.items.find(
+                (department) => department.departmentId === draft.departmentId,
+              )?.effectiveTimezone ?? t("common.noValue") })}
+            </p>
           </label>
           <label>
-            <span className="field-label">บทบาท</span>
+            <span className="field-label">{t("users.role")}</span>
             <select
               className="field-input"
               value={draft.roleId}
@@ -237,7 +247,7 @@ export function AdminUsersPage() {
             >
               {roles.data?.map((role) => (
                 <option key={role.roleId} value={role.roleId}>
-                  {role.roleName}
+                  {roleLabel(t, role.roleCode)}
                 </option>
               ))}
             </select>
@@ -250,14 +260,14 @@ export function AdminUsersPage() {
                 setDraft({ ...draft, isActive: event.target.checked })
               }
             />
-            เปิดใช้งานทันที
+            {t("users.enableNow")}
           </label>
           {save.isError && (
             <div
               role="alert"
               className="rounded-lg bg-[#fef3f2] p-3 text-sm text-[#b42318]"
             >
-              {save.error.message}
+              {localizedError(t, save.error)}
             </div>
           )}
         </div>

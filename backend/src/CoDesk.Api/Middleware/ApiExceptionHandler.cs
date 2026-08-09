@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using Npgsql;
 using CoDesk.Application;
+using System.Text.Json;
 
 namespace CoDesk.Api.Middleware;
 
@@ -14,6 +15,7 @@ public sealed class ApiExceptionHandler(ILogger<ApiExceptionHandler> logger) : I
             UnauthorizedAccessException => (StatusCodes.Status403Forbidden, "Permission denied"),
             KeyNotFoundException => (StatusCodes.Status404NotFound, "Resource not found"),
             ArgumentException => (StatusCodes.Status400BadRequest, "Validation failed"),
+            JsonException => (StatusCodes.Status400BadRequest, "Validation failed"),
             ConflictException => (StatusCodes.Status409Conflict, "Conflict"),
             PostgresException { SqlState: "23505" } => (StatusCodes.Status409Conflict, "Duplicate value"),
             PostgresException { SqlState: "23503" } => (StatusCodes.Status400BadRequest, "Invalid reference"),

@@ -52,11 +52,48 @@ public sealed class ApiAuthorizationTests : IClassFixture<CoDeskApiFactory>
     }
 
     [Fact]
+    public async Task MalformedReportFiltersReturnBadRequest()
+    {
+        using var client = ClientFor(CoDeskApiFactory.HrId);
+        var response = await client.GetAsync("/api/reports/daily-department-bookings?filters=%7Bbad%7D");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
     public async Task AdminCanAccessReportsAndUserManagement()
     {
         using var client = ClientFor(CoDeskApiFactory.AdminId);
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/reports/employee-booking-frequency")).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/admin/users?includeInactive=true")).StatusCode);
+    }
+
+    [Fact]
+    public async Task DepartmentStatusUpdateUsesTheRequestedIdInsteadOfAListPage()
+    {
+        using var client = ClientFor(CoDeskApiFactory.AdminId);
+        var response = await client.PatchAsJsonAsync($"/api/departments/{CoDeskApiFactory.OperationsId}/status", new { isActive = false });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var department = await response.Content.ReadFromJsonAsync<DepartmentDto>();
+        Assert.NotNull(department);
+        Assert.False(department.IsActive);
+    }
+
+    [Fact]
+    public async Task InvalidDepartmentTimezoneIsRejected()
+    {
+        using var client = ClientFor(CoDeskApiFactory.AdminId);
+        var response = await client.PostAsJsonAsync("/api/departments", new
+        {
+            departmentCode = "TZBAD",
+            departmentName = "Invalid timezone",
+            capacityMode = "unlimited",
+            defaultCapacityPerDay = (int?)null,
+            isActive = true,
+            effectiveTimezone = "Mars/Olympus"
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     [Fact]
@@ -186,12 +223,23 @@ internal sealed class FakeDataService : ICoDeskDataService
         Task.FromResult(Profiles.FirstOrDefault(profile => profile.ProfileId == profileId));
     public Task<IReadOnlyList<ProfileDto>> GetDemoProfilesAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<ProfileDto>>(Profiles.Take(3).ToList());
     public Task<IReadOnlyList<RoleDto>> GetRolesAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<RoleDto>>([]);
+    public Task<IReadOnlyList<string>> GetSupportedTimezonesAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<string>>(["Asia/Bangkok", "Asia/Tokyo", "America/New_York"]);
+    public Task<DepartmentDto?> GetDepartmentAsync(Guid departmentId, CancellationToken cancellationToken) =>
+        Task.FromResult<DepartmentDto?>(departmentId == CoDeskApiFactory.OperationsId
+            ? Department(true)
+            : null);
     public Task<PageResult<ProfileDto>> GetProfilesAsync(ListQuery query, CurrentUser actor, bool includeInactive, CancellationToken cancellationToken) => Task.FromResult(new PageResult<ProfileDto>(Profiles, Profiles.Count, 1, 20));
-    public Task<ReportPage> GetReportAsync(string reportCode, ReportQuery query, CancellationToken cancellationToken) => Task.FromResult(new ReportPage([], 0, 1, 50));
+    public Task<ReportPage> GetReportAsync(string reportCode, ReportQuery query, CancellationToken cancellationToken)
+    {
+        if (query.Filters is not null)
+            JsonSerializer.Deserialize<Dictionary<string, string>>(query.Filters);
+        return Task.FromResult(new ReportPage([], 0, 1, 50));
+    }
     public Task<PageResult<BookingDto>> GetBookingsAsync(BookingQuery query, CurrentUser actor, bool calendarScope, CancellationToken cancellationToken)
     {
         var booking = new BookingDto(Guid.NewGuid(), CoDeskApiFactory.OtherEmployeeId, "EMP002", "Other", CoDeskApiFactory.OtherEmployeeId,
-            "Other", CoDeskApiFactory.OperationsId, "OPS", "Operations", "single_day", new DateOnly(2026, 8, 20), new DateOnly(2026, 8, 20),
+            "Other", CoDeskApiFactory.OperationsId, "OPS", "Operations", "Asia/Bangkok", "single_day", new DateOnly(2026, 8, 20), new DateOnly(2026, 8, 20),
             DateTimeOffset.Parse("2026-08-19T17:00:00Z"), DateTimeOffset.Parse("2026-08-20T17:00:00Z"), false, "booked", null, null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
         IReadOnlyList<BookingDto> result = actor.RoleCode == "admin" || actor.DepartmentId == booking.DepartmentId ? [booking] : [];
         return Task.FromResult(new PageResult<BookingDto>(result, result.Count, 1, 50));
@@ -209,7 +257,17 @@ internal sealed class FakeDataService : ICoDeskDataService
     }
 
     public Task<DepartmentDto?> CreateDepartmentAsync(DepartmentUpsertRequest request, Guid actorId, CancellationToken cancellationToken) => throw new NotSupportedException();
-    public Task<DepartmentDto?> UpdateDepartmentAsync(Guid departmentId, DepartmentUpsertRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+    public Task<DepartmentDto?> UpdateDepartmentAsync(Guid departmentId, DepartmentUpsertRequest request, CancellationToken cancellationToken) =>
+        Task.FromResult<DepartmentDto?>(departmentId == CoDeskApiFactory.OperationsId
+            ? Department(request.IsActive) with
+            {
+                DepartmentCode = request.DepartmentCode,
+                DepartmentName = request.DepartmentName,
+                CapacityMode = request.CapacityMode,
+                DefaultCapacityPerDay = request.DefaultCapacityPerDay,
+                EffectiveTimezone = request.EffectiveTimezone,
+            }
+            : null);
     public Task<PageResult<DepartmentDto>> GetDepartmentsAsync(ListQuery query, bool includeInactive, CancellationToken cancellationToken) => Task.FromResult(new PageResult<DepartmentDto>([], 0, 1, 20));
     public Task<ProfileDto?> UpdateProfileAsync(Guid profileId, ProfileUpdateRequest request, CurrentUser actor, CancellationToken cancellationToken) => throw new NotSupportedException();
     public Task ValidateNewProfileAsync(AdminCreateUserRequest request, CancellationToken cancellationToken) => Task.CompletedTask;
@@ -219,7 +277,7 @@ internal sealed class FakeDataService : ICoDeskDataService
         return Task.FromResult(new ProfileDto(
             authUserId, request.EmployeeCode, request.FullName, request.Email,
             request.DepartmentId, "OPS", "Operations", request.RoleId, "employee", "Employee",
-            request.IsActive, "Asia/Bangkok", false, false, false));
+            request.IsActive, "Asia/Bangkok", "Asia/Bangkok", false, false, false));
     }
     public Task<PageResult<HolidayDto>> GetHolidaysAsync(ListQuery query, bool includeInactive, CancellationToken cancellationToken) => Task.FromResult(new PageResult<HolidayDto>([], 0, 1, 20));
     public Task<HolidayDto?> CreateHolidayAsync(HolidayUpsertRequest request, Guid actorId, CancellationToken cancellationToken) => throw new NotSupportedException();
@@ -233,7 +291,11 @@ internal sealed class FakeDataService : ICoDeskDataService
 
     private static ProfileDto Profile(Guid id, string code, string name, string role, Guid departmentId, string departmentCode) =>
         new(id, code, name, $"{code.ToLowerInvariant()}@example.test", departmentId, departmentCode, departmentCode,
-            Guid.NewGuid(), role, role, true, "Asia/Bangkok", role == "admin", role is "hr" or "admin", role is "hr" or "admin");
+            Guid.NewGuid(), role, role, true, "Asia/Bangkok", "Asia/Bangkok",
+            role == "admin", role is "hr" or "admin", role is "hr" or "admin");
+    private static DepartmentDto Department(bool isActive) => new(
+        CoDeskApiFactory.OperationsId, "OPS", "Operations", "limited", 3, isActive,
+        "Asia/Bangkok", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
     private static JsonElement Json(string value) { using var document = JsonDocument.Parse(value); return document.RootElement.Clone(); }
 }
 

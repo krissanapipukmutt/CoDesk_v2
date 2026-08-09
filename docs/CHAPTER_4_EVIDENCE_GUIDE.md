@@ -6,15 +6,17 @@
 2. Start the backend at `http://localhost:5080` with Demo Mode enabled.
 3. Start the frontend at `http://localhost:5173` with `VITE_DEMO_MODE=true`.
 4. Set the browser viewport to 1440×900 for desktop screenshots and 390×844 for a mobile example.
-5. Keep database credentials, browser tokens, and service-role keys outside every screenshot.
+5. Keep database credentials, browser tokens, and Supabase Secret keys outside every screenshot.
 
 The seed is centered on August 2026. In the calendar, navigate to August 2026 if it is not already visible.
 
-For production-auth evidence, use the existing ignored Production Mode environment files instead of Demo Mode. The hosted project was verified on 2026-08-04 after migration from Legacy HS256 to ECC P-256 / ES256. Never show an access/refresh token, authorization header, password, UUID, real email address, database connection, anon key, or service-role key in a screenshot.
+For production-auth evidence, use the existing ignored Production Mode environment files instead of Demo Mode. The hosted project was verified on 2026-08-04 after migration from Legacy HS256 to ECC P-256 / ES256. Never show an access/refresh token, authorization header, password, UUID, real email address, database connection, Publishable key, or Secret key in a screenshot.
 
 ## UI screenshot checklist
 
 - [ ] Demo Role Selection showing Employee, HR, and Admin cards.
+- [ ] Thai first-visit screen and the globally reachable Thai/EN switcher; then the same route in English after switching.
+- [ ] Refresh the English screen and show that the preference persists; do not expose unrelated local-storage values.
 - [ ] Employee menu: overview, booking, calendar; no reports or management menus.
 - [ ] HR menu: departments, employees, reports; no holidays or user creation.
 - [ ] Admin menu: every menu including holidays and users/roles.
@@ -29,13 +31,18 @@ For production-auth evidence, use the existing ignored Production Mode environme
 - [ ] Employee same-department names visible; DIGI records absent from employee view.
 - [ ] Admin calendar showing all departments.
 - [ ] Department management table and limited/unlimited edit dialog.
+- [ ] Department timezone search showing a valid `Asia/Tokyo` selection and rejection of an unsupported name; restore or deactivate the evidence department afterward.
 - [ ] Employee management edit dialog and department-history section.
+- [ ] Employee transfer showing the synchronized profile timezone and at least two department-history entries. Do not claim that editing a department timezone bulk-updates existing profiles; it intentionally does not.
 - [ ] Holiday management including the inactive record.
 - [ ] Admin user creation form; do not submit unless production Supabase credentials are configured.
 - [ ] Each of the five report tabs with actual rows.
 - [ ] A per-column report filter, such as `OPS` in the department-code filter.
 - [ ] Capacity chart plus the unchanged full source table.
 - [ ] Responsive mobile navigation and one booking screen.
+- [ ] English desktop/tablet/mobile examples showing no truncated switcher, menu, dialog, or table labels; retain IANA identifiers such as `Asia/Bangkok` verbatim.
+
+For timezone narration, state that booking business dates, capacity, and global-holiday matching use the target department's effective IANA timezone; timed calendar entries use the signed-in profile timezone; and historical booking dates remain unchanged after a later department timezone edit. Holidays are still one global calendar, not department-specific records.
 
 ## Supabase/database evidence checklist
 
@@ -62,7 +69,7 @@ Capture the Supabase Table Editor or SQL results without connection strings:
 - [ ] Admin User Management page and a disposable creation success through `POST /api/admin/users`; do not show the temporary password or email.
 - [ ] Redacted database/Auth comparison proving `auth.users.id = co_desk.profiles.profile_id` without publishing the UUID.
 - [ ] Initial `user_department_history` row for the disposable user, with identifying columns redacted.
-- [ ] Evidence that the frontend request targets `/api/admin/users`, not `/auth/v1/admin/users`, and that no service-role credential is present.
+- [ ] Evidence that the frontend request targets `/api/admin/users`, not `/auth/v1/admin/users`, and that no Supabase Secret credential is present.
 - [ ] Project Functions page or CLI listing showing the unused legacy `admin_create_user` Edge Function is absent. Do not create a replacement; the current architecture requires no Edge Function for user creation.
 - [ ] Cleanup evidence: disposable profile inactive, no active disposable booking, and disposable Auth identity removed. Do not delete or modify the real administrator.
 
@@ -105,14 +112,20 @@ npm run build
 npm run test:e2e
 ```
 
-Expected local verified totals from the implementation session:
+Expected local verified totals after the 2026-08-09 multi-timezone and bilingual UI implementation:
 
-- xUnit: 19 passed (8 unit + 11 in-process API tests).
-- Vitest/RTL: 12 passed.
-- Playwright: 15 passed against the real temporary database/API/UI stack.
+- xUnit: 25 passed (11 unit + 14 in-process API tests).
+- Vitest/RTL: 39 passed across 6 files.
+- Playwright: 17 passed against the real temporary database/API/UI stack.
 - SQL smoke script: completed and rolled back without errors on both a fresh and populated PostgreSQL 14.21 database.
 - Concurrency evidence: one booking committed and the concurrent capacity contender returned `capacity_exceeded`.
 
+The prior credential blocker is resolved: the frontend uses only the Publishable key, the backend Secret key is absent from the rebuilt bundle, and legacy JWT-based API keys are disabled. Preserve that separation and never include either credential in Chapter 4 evidence.
+
+Timezone-specific automated evidence includes invalid IANA rejection, Asia/Tokyo profile inheritance and single-day conversion, department-transfer synchronization, non-retrospective department timezone edits, historical report dates, global-holiday matching across a Tokyo local boundary, America/New_York winter/summer DST offsets, and localized rejection of a nonexistent New York spring-forward wall time.
+
+Bilingual automated evidence includes Thai default without browser detection, two-way switching, `codesk.language` persistence across refresh, `<html lang>` updates, unchanged employee/HR/admin menus, translated pages and client validation/dialogs, localized role/status/enum labels, unchanged database text and IANA identifiers, no API write caused by switching, timezone independence, and a 390×844 mobile switch.
+
 Post-hosted-verification rerun on 2026-08-04 produced the same 19 xUnit and 12 Vitest totals, with backend build 0 warnings/errors and frontend typecheck/lint/build passing. Safe isolated Playwright browser probes against Production Mode also passed for real login, role menus, user creation response, and direct API/database flows. Do not run `demo-mode.spec.ts` against Production Mode because its Demo header is intentionally disabled.
 
-These are the independent 2026-08-04 totals. For requirement status and limitations, include `docs/VERIFICATION_AND_REQUIREMENT_MATRIX.md` in the Chapter 4 evidence package.
+The 2026-08-04 hosted totals describe the pre-timezone production baseline. The 2026-08-09 timezone totals above are isolated local verification; do not present the timezone release as hosted until an explicitly authorized deployment and hosted regression pass are complete. For requirement status and limitations, include `docs/VERIFICATION_AND_REQUIREMENT_MATRIX.md` in the Chapter 4 evidence package.

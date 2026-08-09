@@ -12,8 +12,8 @@ public sealed class SupabaseAdminService(HttpClient httpClient, IOptions<Supabas
 
     public bool IsConfigured =>
         Uri.TryCreate(_options.Url, UriKind.Absolute, out _) &&
-        !string.IsNullOrWhiteSpace(_options.ServiceRoleKey) &&
-        !_options.ServiceRoleKey.Contains("server-only", StringComparison.OrdinalIgnoreCase);
+        !string.IsNullOrWhiteSpace(_options.SecretKey) &&
+        !_options.SecretKey.Contains("server-only", StringComparison.OrdinalIgnoreCase);
 
     public async Task<Guid> CreateUserAsync(string email, string password, string fullName, CancellationToken cancellationToken)
     {
@@ -56,8 +56,8 @@ public sealed class SupabaseAdminService(HttpClient httpClient, IOptions<Supabas
     private HttpRequestMessage CreateRequest(HttpMethod method, string path)
     {
         var request = new HttpRequestMessage(method, _options.Url.TrimEnd('/') + path);
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _options.ServiceRoleKey);
-        request.Headers.Add("apikey", _options.ServiceRoleKey);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _options.SecretKey);
+        request.Headers.Add("apikey", _options.SecretKey);
         return request;
     }
 

@@ -11,12 +11,11 @@ namespace CoDesk.Infrastructure;
 public sealed class CoDeskDataService(NpgsqlDataSource dataSource) : ICoDeskDataService
 {
     private readonly NpgsqlDataSource _dataSource = dataSource;
-    private static readonly TimeZoneInfo BangkokTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Bangkok");
 
     private const string ProfileSelect = """
         SELECT p.profile_id, p.employee_code, p.full_name, p.email,
                p.department_id, d.department_code, d.department_name,
-               p.role_id, r.role_code, r.role_name, p.is_active, p.timezone_name,
+               p.role_id, r.role_code, r.role_name, p.is_active, p.timezone_name, d.effective_timezone,
                r.can_manage_users, r.can_manage_departments, r.can_view_reports
         FROM co_desk.profiles p
         JOIN co_desk.departments d ON d.department_id = p.department_id
@@ -26,6 +25,7 @@ public sealed class CoDeskDataService(NpgsqlDataSource dataSource) : ICoDeskData
     private const string BookingSelect = """
         SELECT b.booking_id, b.booked_for_profile_id, target.employee_code, target.full_name,
                b.booked_by_profile_id, actor.full_name, b.department_id, d.department_code, d.department_name,
+               COALESCE(booking_context.business_timezone, 'Asia/Bangkok') AS business_timezone,
                b.booking_mode, b.booking_date_start, b.booking_date_end, b.start_at, b.end_at,
                b.holiday_warning_acknowledged, b.status_code, b.note_text, b.cancelled_at,
                b.cancelled_by_profile_id, b.created_at, b.updated_at
@@ -33,6 +33,15 @@ public sealed class CoDeskDataService(NpgsqlDataSource dataSource) : ICoDeskData
         JOIN co_desk.profiles target ON target.profile_id = b.booked_for_profile_id
         JOIN co_desk.profiles actor ON actor.profile_id = b.booked_by_profile_id
         JOIN co_desk.departments d ON d.department_id = b.department_id
+        LEFT JOIN LATERAL (
+            SELECT l.new_values_json ->> 'business_timezone' AS business_timezone
+            FROM co_desk.booking_audit_logs l
+            WHERE l.booking_id = b.booking_id
+              AND l.action_code IN ('create', 'update')
+              AND l.new_values_json ? 'business_timezone'
+            ORDER BY l.action_at DESC
+            LIMIT 1
+        ) booking_context ON true
         """;
 
     public async Task<ProfileDto?> GetProfileAsync(Guid profileId, CancellationToken cancellationToken)
@@ -65,6 +74,30 @@ public sealed class CoDeskDataService(NpgsqlDataSource dataSource) : ICoDeskData
         return await ReadListAsync(command, reader => new RoleDto(
             reader.GetGuid(0), reader.GetString(1), reader.GetString(2),
             reader.GetBoolean(3), reader.GetBoolean(4), reader.GetBoolean(5)), cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<string>> GetSupportedTimezonesAsync(CancellationToken cancellationToken)
+    {
+        await using var command = _dataSource.CreateCommand("""
+            SELECT name
+            FROM pg_catalog.pg_timezone_names
+            WHERE name NOT LIKE 'posix/%' AND name NOT LIKE 'right/%'
+            ORDER BY name
+            """);
+        return await ReadListAsync(command, reader => reader.GetString(0), cancellationToken);
+    }
+
+    public async Task<DepartmentDto?> GetDepartmentAsync(Guid departmentId, CancellationToken cancellationToken)
+    {
+        await using var command = _dataSource.CreateCommand("""
+            SELECT department_id, department_code, department_name, capacity_mode,
+                   default_capacity_per_day, is_active, effective_timezone, created_at, updated_at
+            FROM co_desk.departments
+            WHERE department_id = @department_id
+            """);
+        command.Parameters.AddWithValue("department_id", departmentId);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        return await reader.ReadAsync(cancellationToken) ? MapDepartment(reader) : null;
     }
 
     public async Task<PageResult<DepartmentDto>> GetDepartmentsAsync(ListQuery query, bool includeInactive, CancellationToken cancellationToken)
@@ -102,6 +135,7 @@ public sealed class CoDeskDataService(NpgsqlDataSource dataSource) : ICoDeskData
 
     public async Task<DepartmentDto?> CreateDepartmentAsync(DepartmentUpsertRequest request, Guid actorId, CancellationToken cancellationToken)
     {
+        await EnsureSupportedTimezoneAsync(request.EffectiveTimezone, cancellationToken);
         await using var command = _dataSource.CreateCommand("""
             INSERT INTO co_desk.departments (
                 department_code, department_name, capacity_mode, default_capacity_per_day,
@@ -118,6 +152,7 @@ public sealed class CoDeskDataService(NpgsqlDataSource dataSource) : ICoDeskData
 
     public async Task<DepartmentDto?> UpdateDepartmentAsync(Guid departmentId, DepartmentUpsertRequest request, CancellationToken cancellationToken)
     {
+        await EnsureSupportedTimezoneAsync(request.EffectiveTimezone, cancellationToken);
         await using var command = _dataSource.CreateCommand("""
             UPDATE co_desk.departments SET
                 department_code = upper(@code), department_name = @name,
@@ -259,8 +294,8 @@ public sealed class CoDeskDataService(NpgsqlDataSource dataSource) : ICoDeskData
         }
         await using (var command = new NpgsqlCommand("""
             INSERT INTO co_desk.profiles (
-                profile_id, employee_code, full_name, email, department_id, role_id, is_active, timezone_name
-            ) VALUES (@profile_id, upper(@employee_code), @full_name, lower(@email), @department_id, @role_id, @is_active, 'Asia/Bangkok')
+                profile_id, employee_code, full_name, email, department_id, role_id, is_active
+            ) VALUES (@profile_id, upper(@employee_code), @full_name, lower(@email), @department_id, @role_id, @is_active)
             """, connection, transaction))
         {
             command.Parameters.AddWithValue("profile_id", authUserId);
@@ -375,11 +410,11 @@ public sealed class CoDeskDataService(NpgsqlDataSource dataSource) : ICoDeskData
     {
         var target = await GetProfileAsync(targetProfileId, cancellationToken)
             ?? throw new KeyNotFoundException("Target profile was not found.");
-        var (startAt, endAt) = NormalizeBookingRange(request);
+        var (startAt, endAt) = NormalizeBookingRange(request, target.DepartmentTimezone);
         await using var command = _dataSource.CreateCommand("""
             SELECT co_desk.check_booking_conflict(@target, @start_at, @end_at, @exclude)::text,
                    co_desk.check_department_capacity(@department, @start_at, @end_at, @exclude)::text,
-                   co_desk.check_booking_holidays(@start_at, @end_at)::text
+                   co_desk.check_booking_holidays(@department, @start_at, @end_at)::text
             """);
         command.Parameters.AddWithValue("target", targetProfileId);
         command.Parameters.AddWithValue("department", target.DepartmentId);
@@ -561,14 +596,17 @@ public sealed class CoDeskDataService(NpgsqlDataSource dataSource) : ICoDeskData
         AddNullable(command, "user_agent", NpgsqlDbType.Text, metadata.UserAgent);
     }
 
-    private static (DateTimeOffset StartAt, DateTimeOffset EndAt) NormalizeBookingRange(BookingWriteRequest request)
+    private static (DateTimeOffset StartAt, DateTimeOffset EndAt) NormalizeBookingRange(
+        BookingWriteRequest request,
+        string departmentTimezone)
     {
         if (request.BookingMode == BookingModes.SingleDay && request.BookingDateStart.HasValue)
         {
-            var localStart = DateTime.SpecifyKind(request.BookingDateStart.Value.ToDateTime(TimeOnly.MinValue), DateTimeKind.Unspecified);
-            var localEnd = localStart.AddDays(1);
-            return (new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(localStart, BangkokTimeZone)),
-                    new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(localEnd, BangkokTimeZone)));
+            var date = request.BookingDateStart.Value;
+            return (
+                TimezoneRules.LocalDateTimeToUtc(date, TimeOnly.MinValue, departmentTimezone),
+                TimezoneRules.LocalDateTimeToUtc(date.AddDays(1), TimeOnly.MinValue, departmentTimezone)
+            );
         }
         if (request.BookingMode == BookingModes.DateTimeRange && request.StartAt.HasValue && request.EndAt > request.StartAt)
             return (request.StartAt.Value, request.EndAt!.Value);
@@ -590,7 +628,7 @@ public sealed class CoDeskDataService(NpgsqlDataSource dataSource) : ICoDeskData
         reader.GetGuid(0), reader.GetString(1), reader.GetString(2), reader.GetString(3),
         reader.GetGuid(4), reader.GetString(5), reader.GetString(6), reader.GetGuid(7),
         reader.GetString(8), reader.GetString(9), reader.GetBoolean(10), reader.GetString(11),
-        reader.GetBoolean(12), reader.GetBoolean(13), reader.GetBoolean(14));
+        reader.GetString(12), reader.GetBoolean(13), reader.GetBoolean(14), reader.GetBoolean(15));
 
     private static DepartmentDto MapDepartment(NpgsqlDataReader reader) => new(
         reader.GetGuid(0), reader.GetString(1), reader.GetString(2), reader.GetString(3),
@@ -605,11 +643,11 @@ public sealed class CoDeskDataService(NpgsqlDataSource dataSource) : ICoDeskData
     private static BookingDto MapBooking(NpgsqlDataReader reader) => new(
         reader.GetGuid(0), reader.GetGuid(1), reader.GetString(2), reader.GetString(3),
         reader.GetGuid(4), reader.GetString(5), reader.GetGuid(6), reader.GetString(7), reader.GetString(8),
-        reader.GetString(9), reader.GetFieldValue<DateOnly>(10), reader.GetFieldValue<DateOnly>(11),
-        reader.GetFieldValue<DateTimeOffset>(12), reader.GetFieldValue<DateTimeOffset>(13), reader.GetBoolean(14),
-        reader.GetString(15), reader.IsDBNull(16) ? null : reader.GetString(16),
-        reader.IsDBNull(17) ? null : reader.GetFieldValue<DateTimeOffset>(17),
-        reader.IsDBNull(18) ? null : reader.GetGuid(18), reader.GetFieldValue<DateTimeOffset>(19), reader.GetFieldValue<DateTimeOffset>(20));
+        reader.GetString(9), reader.GetString(10), reader.GetFieldValue<DateOnly>(11), reader.GetFieldValue<DateOnly>(12),
+        reader.GetFieldValue<DateTimeOffset>(13), reader.GetFieldValue<DateTimeOffset>(14), reader.GetBoolean(15),
+        reader.GetString(16), reader.IsDBNull(17) ? null : reader.GetString(17),
+        reader.IsDBNull(18) ? null : reader.GetFieldValue<DateTimeOffset>(18),
+        reader.IsDBNull(19) ? null : reader.GetGuid(19), reader.GetFieldValue<DateTimeOffset>(20), reader.GetFieldValue<DateTimeOffset>(21));
 
     private static async Task<IReadOnlyList<T>> ReadListAsync<T>(NpgsqlCommand command, Func<NpgsqlDataReader, T> map, CancellationToken cancellationToken)
     {
@@ -626,7 +664,16 @@ public sealed class CoDeskDataService(NpgsqlDataSource dataSource) : ICoDeskData
         command.Parameters.AddWithValue("capacity_mode", request.CapacityMode);
         AddNullable(command, "capacity", NpgsqlDbType.Integer, request.DefaultCapacityPerDay);
         command.Parameters.AddWithValue("is_active", request.IsActive);
-        command.Parameters.AddWithValue("timezone", request.EffectiveTimezone);
+        command.Parameters.AddWithValue("timezone", request.EffectiveTimezone.Trim());
+    }
+
+    private async Task EnsureSupportedTimezoneAsync(string timezoneName, CancellationToken cancellationToken)
+    {
+        TimezoneRules.GetRequiredTimeZone(timezoneName);
+        await using var command = _dataSource.CreateCommand("SELECT co_desk.is_supported_timezone(@timezone)");
+        command.Parameters.AddWithValue("timezone", timezoneName.Trim());
+        if (await command.ExecuteScalarAsync(cancellationToken) is not true)
+            throw new ArgumentException("The selected IANA timezone is not supported.");
     }
 
     private static void AddHolidayParameters(NpgsqlCommand command, HolidayUpsertRequest request)

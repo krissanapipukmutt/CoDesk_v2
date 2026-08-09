@@ -2,16 +2,20 @@ SET search_path = co_desk, public;
 
 CREATE OR REPLACE VIEW co_desk.vw_daily_department_bookings AS
 SELECT
-    d.business_date,
+    generated.business_date::date AS business_date,
     dep.department_id,
     dep.department_code,
     dep.department_name,
     COUNT(*)::integer AS active_booking_total
 FROM co_desk.bookings b
 JOIN co_desk.departments dep ON dep.department_id = b.department_id
-JOIN LATERAL co_desk.booking_touched_dates(b.start_at, b.end_at, 'Asia/Bangkok') d ON true
+JOIN LATERAL generate_series(
+    b.booking_date_start::timestamp,
+    b.booking_date_end::timestamp,
+    interval '1 day'
+) AS generated(business_date) ON true
 WHERE b.status_code = 'booked'
-GROUP BY d.business_date, dep.department_id, dep.department_code, dep.department_name;
+GROUP BY generated.business_date::date, dep.department_id, dep.department_code, dep.department_name;
 
 CREATE OR REPLACE VIEW co_desk.vw_department_capacity_utilization AS
 SELECT
@@ -79,7 +83,10 @@ WHERE h.is_active;
 CREATE OR REPLACE VIEW co_desk.vw_booking_cancellation_summary AS
 SELECT
     b.booking_id,
-    (b.cancelled_at AT TIME ZONE 'Asia/Bangkok')::date AS cancellation_date,
+    COALESCE(
+        audit.cancellation_business_date,
+        (b.cancelled_at AT TIME ZONE 'Asia/Bangkok')::date
+    ) AS cancellation_date,
     b.cancelled_at,
     p.profile_id,
     p.employee_code,
@@ -90,13 +97,18 @@ SELECT
     actor.profile_id AS cancelled_by_profile_id,
     actor.full_name AS cancelled_by_name,
     audit.action_reason,
-    COUNT(*) OVER (PARTITION BY dep.department_id, (b.cancelled_at AT TIME ZONE 'Asia/Bangkok')::date)::integer AS department_daily_cancellation_total
+    COUNT(*) OVER (PARTITION BY dep.department_id, COALESCE(
+        audit.cancellation_business_date,
+        (b.cancelled_at AT TIME ZONE 'Asia/Bangkok')::date
+    ))::integer AS department_daily_cancellation_total
 FROM co_desk.bookings b
 JOIN co_desk.profiles p ON p.profile_id = b.booked_for_profile_id
 JOIN co_desk.departments dep ON dep.department_id = b.department_id
 LEFT JOIN co_desk.profiles actor ON actor.profile_id = b.cancelled_by_profile_id
 LEFT JOIN LATERAL (
-    SELECT l.action_reason
+    SELECT
+        l.action_reason,
+        NULLIF(l.new_values_json ->> 'cancellation_business_date', '')::date AS cancellation_business_date
     FROM co_desk.booking_audit_logs l
     WHERE l.booking_id = b.booking_id AND l.action_code = 'cancel'
     ORDER BY l.action_at DESC

@@ -1,4 +1,5 @@
 import { Button } from "./ui/Button";
+import { useTranslation } from "react-i18next";
 export function Pagination({
   page,
   pageSize,
@@ -10,11 +11,12 @@ export function Pagination({
   total: number;
   onPageChange: (page: number) => void;
 }) {
+  const { t } = useTranslation();
   const pages = Math.max(1, Math.ceil(total / pageSize));
   return (
     <div className="mt-4 flex items-center justify-between gap-3 text-sm text-[#667085]">
       <span>
-        ทั้งหมด {total} รายการ · หน้า {page}/{pages}
+        {t("common.totalPage", { total, page, pages })}
       </span>
       <div className="flex gap-2">
         <Button
@@ -23,7 +25,7 @@ export function Pagination({
           disabled={page <= 1}
           onClick={() => onPageChange(page - 1)}
         >
-          ก่อนหน้า
+          {t("common.previous")}
         </Button>
         <Button
           size="sm"
@@ -31,7 +33,7 @@ export function Pagination({
           disabled={page >= pages}
           onClick={() => onPageChange(page + 1)}
         >
-          ถัดไป
+          {t("common.next")}
         </Button>
       </div>
     </div>

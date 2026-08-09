@@ -5,6 +5,5 @@
 - The only application tables are the seven approved tables in schema `co_desk`.
 - SQL scripts under `database/sql/` are authoritative. Do not create or run EF Core migrations.
 - Never commit credentials. Use the checked-in `.env.example` and backend example settings only.
-- Use Asia/Bangkok for business dates and UTC-backed `timestamptz` values for instants.
+- Use each department's validated IANA timezone for booking business dates, default new departments to Asia/Bangkok, and keep instants in UTC-backed `timestamptz` values.
 - Run frontend and backend build/test commands before marking work complete.
-

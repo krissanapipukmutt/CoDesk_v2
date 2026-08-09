@@ -15,11 +15,12 @@ export interface Profile {
   roleName: string;
   isActive: boolean;
   timezoneName: string;
+  departmentTimezone: string;
   canManageUsers: boolean;
   canManageDepartments: boolean;
   canViewReports: boolean;
 }
-export type CurrentUser = Omit<Profile, "roleId" | "timezoneName">;
+export type CurrentUser = Omit<Profile, "roleId">;
 export interface Department {
   departmentId: string;
   departmentCode: string;
@@ -51,6 +52,7 @@ export interface Booking {
   departmentId: string;
   departmentCode: string;
   departmentName: string;
+  businessTimezone: string;
   bookingMode: BookingMode;
   bookingDateStart: string;
   bookingDateEnd: string;

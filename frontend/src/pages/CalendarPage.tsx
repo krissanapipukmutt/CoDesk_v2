@@ -1,8 +1,10 @@
 import dayGridPlugin from "@fullcalendar/daygrid";
 import interactionPlugin from "@fullcalendar/interaction";
+import thLocale from "@fullcalendar/core/locales/th";
 import FullCalendar from "@fullcalendar/react";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { apiFetch, isDemoMode, toQuery } from "../api/client";
 import { useAuth } from "../auth/useAuth";
@@ -11,9 +13,11 @@ import { Button } from "../components/ui/Button";
 import { Card, PageHeader } from "../components/ui/Card";
 import { Dialog } from "../components/ui/Dialog";
 import type { Booking, PageResult } from "../types";
-import { formatDateTime } from "../utils/date";
+import { bookingStatusLabel, localizedError } from "../i18n/format";
+import { formatDateTime, toCalendarWallTime } from "../utils/date";
 
 export function CalendarPage() {
+  const { t, i18n } = useTranslation();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [range, setRange] = useState({
@@ -37,8 +41,11 @@ export function CalendarPage() {
       start:
         booking.bookingMode === "single_day"
           ? booking.bookingDateStart
-          : booking.startAt,
-      end: booking.bookingMode === "single_day" ? undefined : booking.endAt,
+          : toCalendarWallTime(booking.startAt, user.timezoneName),
+      end:
+        booking.bookingMode === "single_day"
+          ? undefined
+          : toCalendarWallTime(booking.endAt, user.timezoneName),
       allDay: booking.bookingMode === "single_day",
       color:
         booking.statusCode === "cancelled"
@@ -51,26 +58,27 @@ export function CalendarPage() {
   return (
     <>
       <PageHeader
-        title="ปฏิทินการเข้าออฟฟิศ"
+        title={t("calendar.title")}
         description={
           user.roleCode === "admin"
-            ? "แสดงรายการจองทุกฝ่าย"
-            : `แสดงสมาชิกใน ${user.departmentName}`
+            ? t("calendar.adminDescription", { timezone: user.timezoneName })
+            : t("calendar.memberDescription", { department: user.departmentName, timezone: user.timezoneName })
         }
       />
       <Card>
         {query.isError && (
           <ErrorState
-            message={query.error.message}
+            message={localizedError(t, query.error)}
             onRetry={() => void query.refetch()}
           />
         )}
         <FullCalendar
           plugins={[dayGridPlugin, interactionPlugin]}
           initialView="dayGridMonth"
+          locales={[thLocale]}
           initialDate={isDemoMode ? "2026-08-03" : undefined}
-          locale="th"
-          timeZone="Asia/Bangkok"
+          locale={i18n.resolvedLanguage === "en" ? "en" : "th"}
+          timeZone="UTC"
           height="auto"
           dayMaxEvents
           headerToolbar={{
@@ -78,14 +86,19 @@ export function CalendarPage() {
             center: "title",
             right: "dayGridMonth",
           }}
-          buttonText={{ today: "วันนี้", month: "เดือน" }}
+          buttonText={{ today: t("calendar.today"), month: t("calendar.month") }}
           events={events}
-          datesSet={(info) =>
-            setRange({
+          datesSet={(info) => {
+            const next = {
               start: info.startStr.slice(0, 10),
               end: info.endStr.slice(0, 10),
-            })
-          }
+            };
+            setRange((current) =>
+              current.start === next.start && current.end === next.end
+                ? current
+                : next,
+            );
+          }}
           eventClick={(info) =>
             setSelected(info.event.extendedProps.booking as Booking)
           }
@@ -96,30 +109,36 @@ export function CalendarPage() {
         onOpenChange={(open) => {
           if (!open) setSelected(null);
         }}
-        title="รายละเอียดการจอง"
+        title={t("calendar.details")}
         footer={
           selected &&
           (user.roleCode === "admin" ||
             selected.bookedForProfileId === user.profileId) ? (
-            <Button onClick={() => navigate("/bookings")}>ไปหน้าแก้ไข</Button>
+            <Button onClick={() => navigate("/bookings")}>{t("calendar.goToEdit")}</Button>
           ) : undefined
         }
       >
         {selected && (
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
-            <dt className="text-[#667085]">พนักงาน</dt>
+            <dt className="text-[#667085]">{t("calendar.employee")}</dt>
             <dd className="font-semibold">{selected.bookedForName}</dd>
-            <dt className="text-[#667085]">ฝ่าย</dt>
+            <dt className="text-[#667085]">{t("calendar.department")}</dt>
             <dd>
               {selected.departmentCode} · {selected.departmentName}
             </dd>
-            <dt className="text-[#667085]">เริ่ม</dt>
-            <dd>{formatDateTime(selected.startAt)}</dd>
-            <dt className="text-[#667085]">สิ้นสุด</dt>
-            <dd>{formatDateTime(selected.endAt)}</dd>
-            <dt className="text-[#667085]">สถานะ</dt>
-            <dd>{selected.statusCode === "booked" ? "จองแล้ว" : "ยกเลิก"}</dd>
-            <dt className="text-[#667085]">หมายเหตุ</dt>
+            <dt className="text-[#667085]">{t("calendar.start")}</dt>
+            <dd>
+              {formatDateTime(selected.startAt, selected.businessTimezone)}
+            </dd>
+            <dt className="text-[#667085]">{t("calendar.end")}</dt>
+            <dd>
+              {formatDateTime(selected.endAt, selected.businessTimezone)}
+            </dd>
+            <dt className="text-[#667085]">{t("calendar.bookingTimezone")}</dt>
+            <dd>{selected.businessTimezone}</dd>
+            <dt className="text-[#667085]">{t("calendar.status")}</dt>
+            <dd>{bookingStatusLabel(t, selected.statusCode)}</dd>
+            <dt className="text-[#667085]">{t("calendar.notes")}</dt>
             <dd>{selected.noteText || "-"}</dd>
           </dl>
         )}
