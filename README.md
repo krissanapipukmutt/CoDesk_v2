@@ -201,6 +201,7 @@ Health check: `http://localhost:5080/health`
 ## Frontend configuration
 
 ```bash
+#ไม่ต้อง Run แล้ว ไม่งั้น Public Key จะหาย
 cd "/Users/krissanap/Document/KMUTT/Short Paper/Codesk_v2"
 cp "frontend/.env.example" "frontend/.env"
 cd "frontend"
