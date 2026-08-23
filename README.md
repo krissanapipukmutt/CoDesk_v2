@@ -22,8 +22,6 @@ The approved Chapter 1–3 paper and ERD remain unchanged in `Doc/`. PostgreSQL 
 
 ## Roles
 
-## Roles
-
 | Capability | Employee | HR | Admin |
 |---|---:|---:|---:|
 | Book for self | Yes | Yes | Yes |
