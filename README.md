@@ -14,11 +14,13 @@ The approved Chapter 1–3 paper and ERD remain unchanged in `Doc/`. PostgreSQL 
 - Transactional create, update, cancel, and immutable audit logging.
 - Employee, HR, and admin authorization in the API plus role-aware menus.
 - Monthly FullCalendar view with same-department visibility or admin global visibility.
-- Soft-delete department, profile, and holiday management.
+- HR/Admin holiday management with soft deactivation; employees have read-only access to active holidays.
 - Department assignment history maintained by a database trigger.
 - Five real PostgreSQL reporting views with per-column UI filters, sorting, pagination, and a capacity chart.
 - Demo Mode using seeded database identities and the real API/database.
 - Production Supabase Auth JWT validation and server-only Admin user creation, verified against the hosted project with ES256/JWKS tokens and disposable Auth users.
+
+## Roles
 
 ## Roles
 
@@ -31,7 +33,9 @@ The approved Chapter 1–3 paper and ERD remain unchanged in `Doc/`. PostgreSQL 
 | Manage departments | No | Yes | Yes |
 | Manage existing employee profiles | No | Yes, employee role only | Yes |
 | Change roles / create login users | No | No | Yes |
-| Manage holidays | No | No | Yes |
+| View active holidays | Yes | Yes | Yes |
+| View inactive holidays | No | Yes | Yes |
+| Add/edit/deactivate holidays | No | Yes | Yes |
 | View reports | No | Yes | Yes |
 
 The frontend menu is only a usability layer. ASP.NET authorization policies and application rules enforce these permissions independently.
@@ -201,7 +205,8 @@ Health check: `http://localhost:5080/health`
 ## Frontend configuration
 
 ```bash
-#ไม่ต้อง Run แล้ว ไม่งั้น Public Key จะหาย
+# Run เฉพาะครั้งแรกที่ยังไม่มี frontend/.env
+# ถ้ามี frontend/.env อยู่แล้ว ห้าม Run ซ้ำ เพราะจะเขียนทับ Public Key เดิม
 cd "/Users/krissanap/Document/KMUTT/Short Paper/Codesk_v2"
 cp "frontend/.env.example" "frontend/.env"
 cd "frontend"
