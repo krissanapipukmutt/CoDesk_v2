@@ -69,6 +69,7 @@ builder.Services.AddAuthorizationBuilder()
         .Build())
     .AddPolicy("DepartmentManagement", policy => policy.RequireRole("hr", "admin"))
     .AddPolicy("ProfileManagement", policy => policy.RequireRole("hr", "admin"))
+    .AddPolicy("HolidayManagement", policy => policy.RequireRole("hr", "admin"))
     .AddPolicy("Reports", policy => policy.RequireRole("hr", "admin"))
     .AddPolicy("AdminOnly", policy => policy.RequireRole("admin"));
 

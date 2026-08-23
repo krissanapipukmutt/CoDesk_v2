@@ -77,22 +77,29 @@ async function cancelAsAdmin(request: APIRequestContext, bookingId: string) {
   expect(response.ok()).toBeTruthy()
 }
 
-test('employee demo exposes booking/calendar but not protected management', async ({ page }) => {
+test('employee demo exposes read-only holidays but not protected management', async ({ page }) => {
   await selectDemo(page, 'พนักงาน')
   await expect(page.getByText('จองเข้าออฟฟิศ', { exact: true })).toBeVisible()
   await expect(page.getByText('ปฏิทิน', { exact: true })).toBeVisible()
   await expect(page.getByText('รายงาน', { exact: true })).toHaveCount(0)
   await expect(page.getByText('จัดการฝ่ายงาน', { exact: true })).toHaveCount(0)
   await expect(page.getByText('ผู้ใช้และสิทธิ์', { exact: true })).toHaveCount(0)
+  await page.getByText('จัดการวันหยุด', { exact: true }).first().click()
+  await expect(page.getByRole('heading', { name: 'จัดการวันหยุด' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'เพิ่มวันหยุด' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'แก้ไข' })).toHaveCount(0)
 })
 
-test('HR demo exposes approved management and excludes admin-only menus', async ({ page }) => {
+test('HR demo exposes approved management including holidays and excludes admin-only menus', async ({ page }) => {
   await selectDemo(page, 'ฝ่ายทรัพยากรบุคคล')
   await expect(page.getByText('จัดการฝ่ายงาน', { exact: true })).toBeVisible()
   await expect(page.getByText('จัดการพนักงาน', { exact: true })).toBeVisible()
   await expect(page.getByText('รายงาน', { exact: true })).toBeVisible()
-  await expect(page.getByText('จัดการวันหยุด', { exact: true })).toHaveCount(0)
+  await expect(page.getByText('จัดการวันหยุด', { exact: true })).toBeVisible()
   await expect(page.getByText('ผู้ใช้และสิทธิ์', { exact: true })).toHaveCount(0)
+  await page.getByText('จัดการวันหยุด', { exact: true }).first().click()
+  await expect(page.getByRole('button', { name: 'เพิ่มวันหยุด' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'แก้ไข' }).first()).toBeVisible()
 })
 
 test('admin demo exposes all menus and demo role switching works', async ({ page }) => {
@@ -108,6 +115,11 @@ test('admin demo exposes all menus and demo role switching works', async ({ page
 test('direct API calls enforce authentication, role, and department scope', async ({ request }) => {
   expect((await request.get(`${apiBase}/api/me`)).status()).toBe(401)
   const employeeHeaders = { 'X-Demo-Profile-Id': ids.employee }
+  expect((await request.get(`${apiBase}/api/holidays?includeInactive=true`, { headers: employeeHeaders })).status()).toBe(200)
+  const deniedHoliday = { holidayDate: '2099-12-31', holidayName: 'Denied', holidayDescription: null, isActive: false }
+  expect((await request.post(`${apiBase}/api/holidays`, { headers: employeeHeaders, data: deniedHoliday })).status()).toBe(403)
+  expect((await request.put(`${apiBase}/api/holidays/50000000-0000-0000-0000-000000000001`, { headers: employeeHeaders, data: deniedHoliday })).status()).toBe(403)
+  expect((await request.delete(`${apiBase}/api/holidays/50000000-0000-0000-0000-000000000001`, { headers: employeeHeaders })).status()).toBe(405)
   expect((await request.get(`${apiBase}/api/reports/daily-department-bookings`, { headers: employeeHeaders })).status()).toBe(403)
   expect((await request.post(`${apiBase}/api/departments`, {
     headers: employeeHeaders,

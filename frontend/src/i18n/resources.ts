@@ -81,8 +81,8 @@ export const resources = {
       auth: {
         chooseRole: "เลือกบทบาทสำหรับการสาธิตระบบ",
         descriptions: {
-          employee: "จองและดูปฏิทินของฝ่ายตนเอง",
-          hr: "จัดการฝ่าย พนักงานเดิม และดูรายงาน",
+          employee: "จอง ดูปฏิทินของฝ่ายตนเอง และดูวันหยุด",
+          hr: "จัดการฝ่าย พนักงานเดิม วันหยุด และดูรายงาน",
           admin: "เข้าถึงทุกฝ่าย ผู้ใช้ วันหยุด และรายงาน",
         },
         loginTitle: "เข้าสู่ระบบ CoDesk",
@@ -324,7 +324,7 @@ export const resources = {
       },
       auth: {
         chooseRole: "Choose a role for the system demo",
-        descriptions: { employee: "Book and view your department calendar", hr: "Manage departments and existing employees, and view reports", admin: "Access all departments, users, holidays, and reports" },
+        descriptions: { employee: "Book, view your department calendar, and view holidays", hr: "Manage departments, existing employees, and holidays, and view reports", admin: "Access all departments, users, holidays, and reports" },
         loginTitle: "Sign in to CoDesk", loginDescription: "Use your organization's Supabase Auth account",
         email: "Email", password: "Password", submitting: "Signing in…", submit: "Sign in",
         loginFailed: "Sign-in failed. Check your details and try again.",

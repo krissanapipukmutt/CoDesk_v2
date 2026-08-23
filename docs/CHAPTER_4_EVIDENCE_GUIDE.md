@@ -17,8 +17,8 @@ For production-auth evidence, use the existing ignored Production Mode environme
 - [ ] Demo Role Selection showing Employee, HR, and Admin cards.
 - [ ] Thai first-visit screen and the globally reachable Thai/EN switcher; then the same route in English after switching.
 - [ ] Refresh the English screen and show that the preference persists; do not expose unrelated local-storage values.
-- [ ] Employee menu: overview, booking, calendar; no reports or management menus.
-- [ ] HR menu: departments, employees, reports; no holidays or user creation.
+- [ ] Employee menu: overview, booking, calendar, and read-only holidays; no reports or write-management controls.
+- [ ] HR menu: departments, employees, reports, and holiday management; no user creation.
 - [ ] Admin menu: every menu including holidays and users/roles.
 - [ ] Single-day form with one local date and department display.
 - [ ] Date/time-range form with 24-hour start/end fields and a cross-day range.

@@ -7,8 +7,9 @@ import { EmptyState, ErrorState, LoadingState } from "../components/Feedback";
 import { Button } from "../components/ui/Button";
 import { Card, PageHeader } from "../components/ui/Card";
 import { Dialog } from "../components/ui/Dialog";
-import type { Holiday, PageResult } from "../types";
+import { useAuth } from "../auth/useAuth";
 import { localizedError } from "../i18n/format";
+import type { Holiday, PageResult } from "../types";
 
 interface Draft {
   holidayDate: string;
@@ -24,6 +25,8 @@ const blank: Draft = {
 };
 export function HolidaysPage() {
   const { t } = useTranslation();
+  const { user } = useAuth();
+  const canManageHolidays = user?.roleCode === "hr" || user?.roleCode === "admin";
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("holidayDate");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
@@ -32,14 +35,14 @@ export function HolidaysPage() {
   const [draft, setDraft] = useState(blank);
   const client = useQueryClient();
   const query = useQuery({
-    queryKey: ["holidays", search, sortBy, sortDirection],
+    queryKey: ["holidays", search, sortBy, sortDirection, canManageHolidays],
     queryFn: () =>
       apiFetch<PageResult<Holiday>>(
         "/api/holidays" +
           toQuery({
             search,
             pageSize: 100,
-            includeInactive: true,
+            includeInactive: canManageHolidays,
             sortBy,
             sortDirection,
           }),
@@ -58,6 +61,7 @@ export function HolidaysPage() {
     },
   });
   const open = (holiday?: Holiday) => {
+    if (!canManageHolidays) return;
     setEditing(holiday ?? null);
     setDraft(
       holiday
@@ -76,10 +80,12 @@ export function HolidaysPage() {
         title={t("holidays.title")}
         description={t("holidays.description")}
         action={
-          <Button onClick={() => open()}>
-            <Plus size={17} />
-            {t("holidays.add")}
-          </Button>
+          canManageHolidays ? (
+            <Button onClick={() => open()}>
+              <Plus size={17} />
+              {t("holidays.add")}
+            </Button>
+          ) : undefined
         }
       />
       <Card>
@@ -91,7 +97,7 @@ export function HolidaysPage() {
             <Search className="absolute left-3 top-3 text-[#98a2b3]" size={17} />
             <input
               aria-label={t("holidays.searchLabel")}
-              className="field-input pl-9"
+              className="field-input !pl-10"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder={t("holidays.searchPlaceholder")}
@@ -129,7 +135,7 @@ export function HolidaysPage() {
                   <th>{t("holidays.name")}</th>
                   <th>{t("holidays.descriptionField")}</th>
                   <th>{t("holidays.status")}</th>
-                  <th />
+                  {canManageHolidays && <th />}
                 </tr>
               </thead>
               <tbody>
@@ -145,15 +151,17 @@ export function HolidaysPage() {
                         {holiday.isActive ? t("common.active") : t("common.inactive")}
                       </span>
                     </td>
-                    <td>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => open(holiday)}
-                      >
-                        {t("common.edit")}
-                      </Button>
-                    </td>
+                    {canManageHolidays && (
+                      <td>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => open(holiday)}
+                        >
+                          {t("common.edit")}
+                        </Button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

@@ -23,7 +23,7 @@ public static class AuthorizationRules
         actor.IsActive && actor.RoleCode == RoleCodes.Admin;
 
     public static bool CanManageHolidays(CurrentUser actor) =>
-        actor.IsActive && actor.RoleCode == RoleCodes.Admin;
+        actor.IsActive && actor.RoleCode is RoleCodes.Hr or RoleCodes.Admin;
 
     public static bool CanCreateUsers(CurrentUser actor) =>
         actor.IsActive && actor.RoleCode == RoleCodes.Admin;
@@ -31,4 +31,3 @@ public static class AuthorizationRules
     public static bool CanViewReports(CurrentUser actor) =>
         actor.IsActive && actor.RoleCode is RoleCodes.Hr or RoleCodes.Admin;
 }
-

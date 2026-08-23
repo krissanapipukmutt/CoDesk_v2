@@ -15,7 +15,7 @@ public sealed class HolidaysController(ICoDeskDataService dataService) : CoDeskC
     }
 
     [HttpPost]
-    [Authorize(Policy = "AdminOnly")]
+    [Authorize(Policy = "HolidayManagement")]
     public async Task<ActionResult<HolidayDto>> Create([FromBody] HolidayUpsertRequest request, CancellationToken cancellationToken)
     {
         ValidateHoliday(request);
@@ -25,7 +25,7 @@ public sealed class HolidaysController(ICoDeskDataService dataService) : CoDeskC
     }
 
     [HttpPut("{holidayId:guid}")]
-    [Authorize(Policy = "AdminOnly")]
+    [Authorize(Policy = "HolidayManagement")]
     public async Task<ActionResult<HolidayDto>> Update(Guid holidayId, [FromBody] HolidayUpsertRequest request, CancellationToken cancellationToken)
     {
         ValidateHoliday(request);
@@ -39,4 +39,3 @@ public sealed class HolidaysController(ICoDeskDataService dataService) : CoDeskC
         if (request.HolidayDescription?.Length > 1000) throw new ArgumentException("Holiday description cannot exceed 1,000 characters.");
     }
 }
-

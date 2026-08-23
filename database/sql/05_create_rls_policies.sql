@@ -87,12 +87,14 @@ DROP POLICY IF EXISTS profiles_admin_insert ON co_desk.profiles;
 CREATE POLICY profiles_admin_insert ON co_desk.profiles FOR INSERT WITH CHECK (co_desk.is_admin());
 
 DROP POLICY IF EXISTS holidays_read ON co_desk.holidays;
-CREATE POLICY holidays_read ON co_desk.holidays FOR SELECT USING (is_active OR co_desk.is_admin());
+CREATE POLICY holidays_read ON co_desk.holidays FOR SELECT USING (is_active OR co_desk.is_hr_or_admin());
 DROP POLICY IF EXISTS holidays_admin_manage ON co_desk.holidays;
 DROP POLICY IF EXISTS holidays_admin_insert ON co_desk.holidays;
-CREATE POLICY holidays_admin_insert ON co_desk.holidays FOR INSERT WITH CHECK (co_desk.is_admin());
 DROP POLICY IF EXISTS holidays_admin_update ON co_desk.holidays;
-CREATE POLICY holidays_admin_update ON co_desk.holidays FOR UPDATE USING (co_desk.is_admin()) WITH CHECK (co_desk.is_admin());
+DROP POLICY IF EXISTS holidays_manage_insert ON co_desk.holidays;
+CREATE POLICY holidays_manage_insert ON co_desk.holidays FOR INSERT WITH CHECK (co_desk.is_hr_or_admin());
+DROP POLICY IF EXISTS holidays_manage_update ON co_desk.holidays;
+CREATE POLICY holidays_manage_update ON co_desk.holidays FOR UPDATE USING (co_desk.is_hr_or_admin()) WITH CHECK (co_desk.is_hr_or_admin());
 
 DROP POLICY IF EXISTS bookings_read ON co_desk.bookings;
 CREATE POLICY bookings_read ON co_desk.bookings FOR SELECT USING (

@@ -127,7 +127,7 @@ export function DepartmentsPage() {
             />
             <input
               aria-label={t("departments.searchLabel")}
-              className="field-input pl-9"
+              className="field-input !pl-10"
               value={search}
               onChange={(event) => {
                 setSearch(event.target.value);

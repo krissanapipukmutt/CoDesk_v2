@@ -27,10 +27,8 @@ export const navigationForRole = (role: RoleCode): NavItem[] => {
       { to: "/employees", labelKey: "navigation.employees", icon: Users },
       { to: "/reports", labelKey: "navigation.reports", icon: BarChart3 },
     );
+  items.push({ to: "/holidays", labelKey: "navigation.holidays", icon: CalendarDays });
   if (role === "admin")
-    items.push(
-      { to: "/holidays", labelKey: "navigation.holidays", icon: CalendarDays },
-      { to: "/admin/users", labelKey: "navigation.users", icon: ShieldCheck },
-    );
+    items.push({ to: "/admin/users", labelKey: "navigation.users", icon: ShieldCheck });
   return items;
 };

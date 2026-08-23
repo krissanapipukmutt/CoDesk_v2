@@ -28,6 +28,7 @@ public sealed class AuthorizationRulesTests
         Assert.False(AuthorizationRules.CanChangeRole(hr));
         Assert.True(AuthorizationRules.CanManageProfiles(hr));
         Assert.True(AuthorizationRules.CanManageDepartments(hr));
+        Assert.True(AuthorizationRules.CanManageHolidays(hr));
     }
 
     [Fact]
@@ -75,8 +76,11 @@ public sealed class AuthorizationRulesTests
     public void InactiveUsersHaveNoPermissions()
     {
         var inactiveAdmin = User(EmployeeId, RoleCodes.Admin, OperationsId) with { IsActive = false };
+        var inactiveHr = User(EmployeeId, RoleCodes.Hr, OperationsId) with { IsActive = false };
         Assert.False(AuthorizationRules.CanCreateUsers(inactiveAdmin));
         Assert.False(AuthorizationRules.CanBookFor(inactiveAdmin, EmployeeId));
+        Assert.False(AuthorizationRules.CanManageHolidays(inactiveAdmin));
+        Assert.False(AuthorizationRules.CanManageHolidays(inactiveHr));
     }
 
     [Fact]

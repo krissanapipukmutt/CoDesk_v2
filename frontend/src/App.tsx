@@ -130,7 +130,7 @@ export default function App() {
             <Route
               path="holidays"
               element={
-                <RoleRoute roles={["admin"]}>
+                <RoleRoute roles={["employee", "hr", "admin"]}>
                   <HolidaysPage />
                 </RoleRoute>
               }

@@ -10,7 +10,7 @@
 8. A department row `FOR UPDATE` lock serializes capacity checks and writes per department.
 9. Critical booking functions return JSON objects with `success`, `code`, message, and structured details.
 10. Admin alone creates Auth users and changes roles. HR updates existing employee-role profiles but not HR/admin identities.
-11. Holiday management is admin-only because the explicit role section says HR cannot manage holidays.
+11. Employees can view active holidays read-only. HR and Admin can view inactive holidays and create, edit, or soft-deactivate holidays; only Admin retains user/role administration.
 12. Demo Mode uses `X-Demo-Profile-Id`, three deterministic database profiles, and a backend allowlist. The header is not an auth scheme when Demo Mode is disabled.
 13. Production uses Supabase Auth in React, JWT validation/claims enrichment in ASP.NET, a Publishable key in the frontend, and a Secret key only in the backend Admin user service.
 14. RLS uses JWT/app request settings for defense in depth. Report views are not granted to browser-authenticated database roles; reports are served by HR/admin API endpoints.

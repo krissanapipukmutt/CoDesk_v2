@@ -69,6 +69,47 @@ public sealed class ApiAuthorizationTests : IClassFixture<CoDeskApiFactory>
     }
 
     [Fact]
+    public async Task EmployeeCanViewOnlyActiveHolidaysAndCannotManageThem()
+    {
+        using var client = ClientFor(CoDeskApiFactory.EmployeeId);
+        var holidays = await client.GetFromJsonAsync<PageResult<HolidayDto>>("/api/holidays?includeInactive=true");
+
+        Assert.NotNull(holidays);
+        Assert.Single(holidays.Items);
+        Assert.All(holidays.Items, holiday => Assert.True(holiday.IsActive));
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync("/api/holidays", HolidayRequest(false))).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PutAsJsonAsync($"/api/holidays/{CoDeskApiFactory.HolidayId}", HolidayRequest(false))).StatusCode);
+        Assert.Equal(HttpStatusCode.MethodNotAllowed, (await client.DeleteAsync($"/api/holidays/{CoDeskApiFactory.HolidayId}")).StatusCode);
+    }
+
+    [Fact]
+    public async Task HrCanViewInactiveHolidaysAndCreateUpdateOrDeactivateThem()
+    {
+        using var client = ClientFor(CoDeskApiFactory.HrId);
+        var holidays = await client.GetFromJsonAsync<PageResult<HolidayDto>>("/api/holidays?includeInactive=true");
+
+        Assert.NotNull(holidays);
+        Assert.Equal(2, holidays.Items.Count);
+        Assert.Contains(holidays.Items, holiday => !holiday.IsActive);
+        Assert.Equal(HttpStatusCode.Created, (await client.PostAsJsonAsync("/api/holidays", HolidayRequest(true))).StatusCode);
+        var update = await client.PutAsJsonAsync($"/api/holidays/{CoDeskApiFactory.HolidayId}", HolidayRequest(false));
+        Assert.Equal(HttpStatusCode.OK, update.StatusCode);
+        Assert.False((await update.Content.ReadFromJsonAsync<HolidayDto>())!.IsActive);
+    }
+
+    [Fact]
+    public async Task AdminHolidayManagementRemainsAvailable()
+    {
+        using var client = ClientFor(CoDeskApiFactory.AdminId);
+        var holidays = await client.GetFromJsonAsync<PageResult<HolidayDto>>("/api/holidays?includeInactive=true");
+
+        Assert.NotNull(holidays);
+        Assert.Equal(2, holidays.Items.Count);
+        Assert.Equal(HttpStatusCode.Created, (await client.PostAsJsonAsync("/api/holidays", HolidayRequest(true))).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.PutAsJsonAsync($"/api/holidays/{CoDeskApiFactory.HolidayId}", HolidayRequest(false))).StatusCode);
+    }
+
+    [Fact]
     public async Task DepartmentStatusUpdateUsesTheRequestedIdInsteadOfAListPage()
     {
         using var client = ClientFor(CoDeskApiFactory.AdminId);
@@ -176,6 +217,14 @@ public sealed class ApiAuthorizationTests : IClassFixture<CoDeskApiFactory>
         holidayWarningAcknowledged = false,
         noteText = note
     };
+
+    private static object HolidayRequest(bool isActive) => new
+    {
+        holidayDate = "2099-12-31",
+        holidayName = "Authorization test holiday",
+        holidayDescription = "In-memory integration test",
+        isActive
+    };
 }
 
 public sealed class CoDeskApiFactory : WebApplicationFactory<Program>
@@ -184,6 +233,7 @@ public sealed class CoDeskApiFactory : WebApplicationFactory<Program>
     public static readonly Guid HrId = Guid.Parse("30000000-0000-0000-0000-000000000002");
     public static readonly Guid EmployeeId = Guid.Parse("30000000-0000-0000-0000-000000000003");
     public static readonly Guid OtherEmployeeId = Guid.Parse("30000000-0000-0000-0000-000000000004");
+    public static readonly Guid HolidayId = Guid.Parse("50000000-0000-0000-0000-000000000001");
     public static readonly Guid OperationsId = Guid.Parse("20000000-0000-0000-0000-000000000001");
     public static readonly Guid DigitalId = Guid.Parse("20000000-0000-0000-0000-000000000002");
 
@@ -279,9 +329,28 @@ internal sealed class FakeDataService : ICoDeskDataService
             request.DepartmentId, "OPS", "Operations", request.RoleId, "employee", "Employee",
             request.IsActive, "Asia/Bangkok", "Asia/Bangkok", false, false, false));
     }
-    public Task<PageResult<HolidayDto>> GetHolidaysAsync(ListQuery query, bool includeInactive, CancellationToken cancellationToken) => Task.FromResult(new PageResult<HolidayDto>([], 0, 1, 20));
-    public Task<HolidayDto?> CreateHolidayAsync(HolidayUpsertRequest request, Guid actorId, CancellationToken cancellationToken) => throw new NotSupportedException();
-    public Task<HolidayDto?> UpdateHolidayAsync(Guid holidayId, HolidayUpsertRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+    public Task<PageResult<HolidayDto>> GetHolidaysAsync(ListQuery query, bool includeInactive, CancellationToken cancellationToken)
+    {
+        IReadOnlyList<HolidayDto> holidays = includeInactive
+            ? [Holiday(CoDeskApiFactory.HolidayId, true), Holiday(Guid.NewGuid(), false)]
+            : [Holiday(CoDeskApiFactory.HolidayId, true)];
+        return Task.FromResult(new PageResult<HolidayDto>(holidays, holidays.Count, 1, 20));
+    }
+    public Task<HolidayDto?> CreateHolidayAsync(HolidayUpsertRequest request, Guid actorId, CancellationToken cancellationToken) =>
+        Task.FromResult<HolidayDto?>(Holiday(Guid.NewGuid(), request.IsActive) with
+        {
+            HolidayDate = request.HolidayDate,
+            HolidayName = request.HolidayName,
+            HolidayDescription = request.HolidayDescription,
+            CreatedByProfileId = actorId
+        });
+    public Task<HolidayDto?> UpdateHolidayAsync(Guid holidayId, HolidayUpsertRequest request, CancellationToken cancellationToken) =>
+        Task.FromResult<HolidayDto?>(Holiday(holidayId, request.IsActive) with
+        {
+            HolidayDate = request.HolidayDate,
+            HolidayName = request.HolidayName,
+            HolidayDescription = request.HolidayDescription
+        });
     public Task<BookingDto?> GetBookingAsync(Guid bookingId, CancellationToken cancellationToken) => Task.FromResult<BookingDto?>(null);
     public Task<BookingValidationResult> ValidateBookingAsync(BookingWriteRequest request, Guid targetProfileId, Guid? excludeBookingId, CancellationToken cancellationToken) => throw new NotSupportedException();
     public Task<BookingOperationResult> UpdateBookingAsync(Guid bookingId, BookingWriteRequest request, Guid targetProfileId, CurrentUser actor, RequestMetadata metadata, CancellationToken cancellationToken) => throw new NotSupportedException();
@@ -296,6 +365,9 @@ internal sealed class FakeDataService : ICoDeskDataService
     private static DepartmentDto Department(bool isActive) => new(
         CoDeskApiFactory.OperationsId, "OPS", "Operations", "limited", 3, isActive,
         "Asia/Bangkok", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
+    private static HolidayDto Holiday(Guid holidayId, bool isActive) => new(
+        holidayId, new DateOnly(2099, 12, 31), isActive ? "Active holiday" : "Inactive holiday",
+        null, isActive, CoDeskApiFactory.AdminId, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
     private static JsonElement Json(string value) { using var document = JsonDocument.Parse(value); return document.RootElement.Clone(); }
 }
 
