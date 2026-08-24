@@ -237,7 +237,7 @@ test('all five reports render backend rows, column filters, sorting, and source 
   await page.getByText('รายงาน', { exact: true }).first().click()
   for (const title of [
     'ยอดจองรายวันแยกฝ่าย',
-    'การใช้ความจุของฝ่าย',
+    'การจองและความจุของฝ่าย',
     'ความถี่การจองของพนักงาน',
     'การจองในวันหยุด',
     'สรุปการยกเลิก',

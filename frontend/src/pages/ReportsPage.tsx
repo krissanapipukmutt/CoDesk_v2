@@ -12,11 +12,12 @@ import type { TFunction } from "i18next";
 import {
   Bar,
   BarChart,
-  CartesianGrid,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
+  type BarShapeProps,
+  type TooltipContentProps,
 } from "recharts";
 import { apiFetch, toQuery } from "../api/client";
 import { EmptyState, ErrorState, LoadingState } from "../components/Feedback";
@@ -30,6 +31,18 @@ interface Definition {
   code: string;
   title: string;
   columns: Array<{ key: string; label: string }>;
+}
+interface CapacityChartDatum {
+  label: string;
+  date: string;
+  departmentCode: string;
+  departmentName: string;
+  capacityMode: "limited" | "unlimited";
+  capacity: number | null;
+  booked: number;
+  bookedLabel: string;
+  remaining: number | null;
+  utilization: number | null;
 }
 const reportShape = [
   {
@@ -321,31 +334,203 @@ function formatValue(value: unknown, key: string, t: TFunction) {
   if (key === "status_code" && (value === "booked" || value === "cancelled")) return t(`status.${value}`);
   return String(value);
 }
+
+function formatChartDate(value: unknown) {
+  const text = String(value ?? "");
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : text;
+}
+
+function nullableNumber(value: unknown) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function CapacityBarShape({
+  x = 0,
+  y = 0,
+  height = 0,
+  background,
+  payload,
+}: Partial<BarShapeProps>) {
+  const row = payload as CapacityChartDatum | undefined;
+  if (!row || !background) return null;
+
+  const trackX = background.x ?? x;
+  const trackY = background.y ?? y;
+  const trackWidth = background.width;
+  const trackHeight = background.height || height;
+  const labelY = trackY + trackHeight / 2;
+  const radius = Math.min(6, trackHeight / 2);
+
+  if (row.capacityMode === "unlimited") {
+    return (
+      <g>
+        <rect
+          x={trackX}
+          y={trackY}
+          width={trackWidth}
+          height={trackHeight}
+          fill="transparent"
+        />
+        <text
+          x={trackX}
+          y={labelY}
+          dominantBaseline="middle"
+          fill="#344054"
+          fontSize={12}
+          fontWeight={600}
+        >
+          {row.bookedLabel}
+        </text>
+      </g>
+    );
+  }
+
+  const utilization = Math.max(0, Math.min(row.utilization ?? 0, 100));
+  const fillWidth = trackWidth * (utilization / 100);
+  return (
+    <g>
+      <rect
+        x={trackX}
+        y={trackY}
+        width={trackWidth}
+        height={trackHeight}
+        rx={radius}
+        fill="#e8eefc"
+      />
+      <rect
+        x={trackX}
+        y={trackY}
+        width={fillWidth}
+        height={trackHeight}
+        rx={radius}
+        fill="#3157d5"
+      />
+      <text
+        x={trackX + trackWidth + 12}
+        y={labelY}
+        dominantBaseline="middle"
+        fill="#172033"
+        fontSize={12}
+        fontWeight={700}
+      >
+        {row.booked} / {row.capacity ?? "—"}
+      </text>
+    </g>
+  );
+}
+
+function CapacityTooltip({
+  active,
+  payload,
+}: Partial<TooltipContentProps<number, string>>) {
+  const { t } = useTranslation();
+  const row = payload?.[0]?.payload as CapacityChartDatum | undefined;
+  if (!active || !row) return null;
+
+  const details: Array<[string, string | number]> = [
+    [t("reports.columns.business_date"), row.date],
+    [
+      t("reports.columns.department_name"),
+      `${row.departmentCode} · ${row.departmentName}`,
+    ],
+    [
+      t("reports.columns.capacity_per_day"),
+      row.capacityMode === "unlimited"
+        ? t("status.unlimited")
+        : (row.capacity ?? "—"),
+    ],
+    [t("reports.columns.booked_count"), row.booked],
+  ];
+  if (row.capacityMode === "limited") {
+    details.push(
+      [t("reports.columns.remaining_capacity"), row.remaining ?? "—"],
+      [
+        t("reports.columns.utilization_percentage"),
+        row.utilization === null ? "—" : `${row.utilization}%`,
+      ],
+    );
+  }
+
+  return (
+    <dl className="min-w-56 rounded-lg border border-[#d0d5dd] bg-white p-3 text-xs shadow-lg">
+      {details.map(([label, value]) => (
+        <div key={label} className="flex justify-between gap-4 py-1">
+          <dt className="text-[#667085]">{label}</dt>
+          <dd className="text-right font-semibold text-[#172033]">{value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 function ReportChart({ rows }: { rows: Row[] }) {
   const { t } = useTranslation();
   const data = rows
     .slice(0, 12)
-    .map((row) => ({
-      name: `${String(row.business_date ?? "")} ${String(row.department_code ?? "")}`,
-      booked: Number(row.booked_count ?? 0),
-      capacity: Number(row.capacity_per_day ?? 0),
-    }));
+    .map<CapacityChartDatum>((row) => {
+      const date = formatChartDate(row.business_date);
+      const departmentCode = String(row.department_code ?? "");
+      const capacityMode = row.capacity_mode === "unlimited" ? "unlimited" : "limited";
+      const booked = nullableNumber(row.booked_count) ?? 0;
+      return {
+        label: `${departmentCode} · ${date}`,
+        date,
+        departmentCode,
+        departmentName: String(row.department_name ?? ""),
+        capacityMode,
+        capacity: capacityMode === "limited" ? nullableNumber(row.capacity_per_day) : null,
+        booked,
+        remaining: capacityMode === "limited" ? nullableNumber(row.remaining_capacity) : null,
+        utilization: capacityMode === "limited" ? nullableNumber(row.utilization_percentage) : null,
+        bookedLabel: `${t("reports.chartBooked")} ${booked} · ${t("status.unlimited")}`,
+      };
+    });
+  const chartHeight = Math.max(260, data.length * 36 + 24);
   return (
-    <div className="mb-5 h-72 rounded-xl border border-[#e4e8f0] p-3">
+    <div className="mb-5 rounded-xl border border-[#e4e8f0] p-3">
       <div className="mb-2 flex items-center gap-2 font-semibold">
         <BarChart3 size={18} className="text-[#3157d5]" />
         {t("reports.chartTitle")}
       </div>
-      <ResponsiveContainer width="100%" height="88%">
-        <BarChart data={data}>
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="name" hide />
-          <YAxis />
-          <Tooltip />
-          <Bar dataKey="capacity" fill="#c7d7fe" name={t("reports.chartCapacity")} />
-          <Bar dataKey="booked" fill="#3157d5" name={t("reports.chartBooked")} />
-        </BarChart>
-      </ResponsiveContainer>
+      <div className="overflow-x-auto">
+        <div className="min-w-[640px]" style={{ height: chartHeight }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart
+              data={data}
+              layout="vertical"
+              margin={{ top: 4, right: 112, bottom: 4, left: 4 }}
+              accessibilityLayer
+            >
+              <XAxis type="number" hide />
+              <YAxis
+                type="category"
+                dataKey="label"
+                width={160}
+                interval={0}
+                tick={{ fill: "#475467", fontSize: 12 }}
+                tickLine={false}
+                axisLine={false}
+              />
+              <Tooltip
+                content={<CapacityTooltip />}
+                cursor={{ fill: "#f8f9fc" }}
+              />
+              <Bar
+                dataKey="booked"
+                name={t("reports.chartBooked")}
+                fill="#3157d5"
+                background={{ fill: "transparent" }}
+                barSize={18}
+                shape={<CapacityBarShape />}
+                isAnimationActive={false}
+              />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
     </div>
   );
 }

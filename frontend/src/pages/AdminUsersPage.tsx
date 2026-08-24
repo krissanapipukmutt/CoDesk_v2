@@ -90,7 +90,7 @@ export function AdminUsersPage() {
           <Search className="absolute left-3 top-3 text-[#98a2b3]" size={17} />
           <input
             aria-label={t("users.searchLabel")}
-            className="field-input pl-9"
+            className="field-input !pl-10"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             placeholder={t("users.searchPlaceholder")}

@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { Building2, ShieldCheck, UserRoundCog, UsersRound } from "lucide-react";
+import { Building2, Eye, EyeOff, ShieldCheck, UserRoundCog, UsersRound } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -85,6 +85,7 @@ function ProductionLoginPage() {
   const auth = useAuth();
   const navigate = useNavigate();
   const [loginError, setLoginError] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -116,15 +117,29 @@ function ProductionLoginPage() {
             <span className="field-label">{t("auth.email")}</span>
             <input className="field-input" type="email" name="email" required />
           </label>
-          <label>
-            <span className="field-label">{t("auth.password")}</span>
-            <input
-              className="field-input"
-              type="password"
-              name="password"
-              required
-            />
-          </label>
+          <div>
+            <label className="field-label" htmlFor="login-password">
+              {t("auth.password")}
+            </label>
+            <div className="relative">
+              <input
+                id="login-password"
+                className="field-input !pr-10"
+                type={showPassword ? "text" : "password"}
+                name="password"
+                required
+              />
+              <button
+                type="button"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#98a2b3]"
+                aria-label={t(showPassword ? "auth.hidePassword" : "auth.showPassword")}
+                aria-pressed={showPassword}
+                onClick={() => setShowPassword((current) => !current)}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+          </div>
           {loginError && (
             <div role="alert" className="rounded-lg bg-[#fef3f2] p-3 text-sm text-[#b42318]">
               {t("auth.loginFailed")}
