@@ -1,0 +1,14 @@
+**/bin/
+**/obj/
+**/.vs/
+**/.vscode/
+**/.idea/
+.git/
+.gitignore
+.env
+.env.*
+!.env.example
+Dockerfile*
+README.md
+TestResults/
+coverage/
